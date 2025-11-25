@@ -1,0 +1,22 @@
+# Secrets / local config
+rules.local.json5
+accounts.local.json5
+folders.local.json5
+
+# Logs
+mailfilter.log
+*.log
+
+# Python junk
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtualenv
+.venv/
+env/
+venv/
+
+# OS cruft
+.DS_Store
+Thumbs.db
