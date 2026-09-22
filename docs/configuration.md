@@ -52,7 +52,7 @@ Examples:
 
 ```text
 gmail-main
-munkie-main
+aerospace-account
 fastmail-main
 ```
 
@@ -79,7 +79,7 @@ Example:
 ```json5
 {
   "folders": {
-    "munkie-main": {
+    "aerospace-account": {
       "services_payments": "INBOX.Services.Payments",
       "services_to_review": "INBOX.Services.To Review"
     }
@@ -121,7 +121,7 @@ Example:
 
 ```json5
 {
-  "munkie-main": {
+  "aerospace-account": {
     "rules": [
       {
         "name": "Boulder Parks Auto Renewal",

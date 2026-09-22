@@ -78,7 +78,7 @@ Matches the local part of a recipient address exactly.
 For:
 
 ```text
-shop-amazon@munkie.biz
+shop-amazon@aerospace.biz
 ```
 
 the local part is:
