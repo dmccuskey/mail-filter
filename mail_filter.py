@@ -56,6 +56,18 @@ def ensure_folders_exist(imap, account_id, folder_map):
     imap.select("INBOX")
 
 
+def as_list(value):
+    """
+    Normalize a match value to a list.
+    A single string means one value, not a sequence of characters.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return list(value)
+
+
 def contains_all(haystack: str, tokens):
     """Return True if all tokens (case-insensitive) are contained in haystack."""
     if not tokens:
@@ -108,8 +120,8 @@ def local_part_matches(addresses, match_cfg):
       - 'to_prefix': list of prefixes for local names
     If neither is present → no address constraint.
     """
-    to_list = [x.lower() for x in match_cfg.get("to", []) if x]
-    prefixes = [x.lower() for x in match_cfg.get("to_prefix", []) if x]
+    to_list = [x.lower() for x in as_list(match_cfg.get("to")) if x]
+    prefixes = [x.lower() for x in as_list(match_cfg.get("to_prefix")) if x]
 
     # If no local-part constraints, automatically ok
     if not to_list and not prefixes:
@@ -168,25 +180,23 @@ def choose_rule(addresses, subject, from_addr, from_name, rules_cfg):
             continue
 
         # 2) From address constraints
-        from_tokens = match_cfg.get("from_contains", [])
+        from_tokens = as_list(match_cfg.get("from_contains"))
         if from_tokens and not contains_any(from_lower, from_tokens):
             continue
 
         # 3) From name constraints
-        from_name_tokens = match_cfg.get("from_name_contains", [])
+        from_name_tokens = as_list(match_cfg.get("from_name_contains"))
         if from_name_tokens and not contains_any(from_name_lower, from_name_tokens):
             continue
 
         # 4) Subject constraints
-        subj_tokens = match_cfg.get("subject_contains", [])
+        subj_tokens = as_list(match_cfg.get("subject_contains"))
         if subj_tokens and not contains_any(subject_lower, subj_tokens):
             continue
 
         # 4b) Subject equals constraints
-        subj_equals = match_cfg.get("subject_equals", [])
+        subj_equals = as_list(match_cfg.get("subject_equals"))
         if subj_equals:
-            if isinstance(subj_equals, str):
-                subj_equals = [subj_equals]
             if not any(subject_lower == target.lower() for target in subj_equals):
                 continue
             

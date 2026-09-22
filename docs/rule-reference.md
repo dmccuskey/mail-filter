@@ -69,6 +69,19 @@ matches if the subject contains any one of those values.
 
 String matching is case-insensitive.
 
+### Single values
+
+Every match field accepts either a list or a single string. A single string is treated as a one-item list, so these are equivalent:
+
+```json5
+"from_contains": "amazon.com"
+"from_contains": ["amazon.com"]
+```
+
+This applies to `to`, `to_prefix`, `from_contains`, `from_name_contains`, `subject_contains`, and `subject_equals`.
+
+A single string is always one value. It is never split into characters or words. To match any of several values, use a list.
+
 ## Implemented Match Fields
 
 ### `to`
@@ -165,7 +178,7 @@ Example:
 ]
 ```
 
-A string value is also accepted by the current implementation.
+A single string value is also accepted (see [Single values](#single-values)).
 
 ## Implemented Actions
 

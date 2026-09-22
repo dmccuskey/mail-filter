@@ -210,6 +210,29 @@ class ChooseRuleTests(unittest.TestCase):
                 cfg = {"rules": [rule(match, {"move": "x"})]}
                 self.assertIsNotNone(self.choose(cfg, **kwargs))
 
+    def test_string_value_is_one_token_not_characters(self):
+        # Regression: a bare string was iterated character by character,
+        # so "rachellehmannhaupt" matched almost any sender.
+        cfg = {"rules": [rule({"from_contains": "rachellehmannhaupt"}, {"move": "x"})]}
+        self.assertIsNotNone(self.choose(cfg, from_addr="rachellehmannhaupt@example.com"))
+        self.assertIsNone(self.choose(cfg, from_addr="verizon-notifications@verizon.com"))
+
+    def test_string_and_list_values_are_equivalent(self):
+        cases = [
+            ("to", "me", {"addresses": ["me@example.com"]}, {"addresses": ["mae@example.com"]}),
+            ("to_prefix", "dev-", {"addresses": ["dev-x@example.com"]}, {"addresses": ["d@example.com"]}),
+            ("from_contains", "github.com", {"from_addr": "n@github.com"}, {"from_addr": "hub@tig.com"}),
+            ("from_name_contains", "github", {"from_name": "github bot"}, {"from_name": "big hut"}),
+            ("subject_contains", "invoice", {"subject": "Invoice #1"}, {"subject": "voice note"}),
+            ("subject_equals", "hello", {"subject": "Hello"}, {"subject": "hell"}),
+        ]
+        for field, value, hit, miss in cases:
+            for form in (value, [value]):
+                with self.subTest(field=field, form=form):
+                    cfg = {"rules": [rule({field: form}, {"move": "x"})]}
+                    self.assertIsNotNone(self.choose(cfg, **hit))
+                    self.assertIsNone(self.choose(cfg, **miss))
+
     def test_non_matching(self):
         cfg = {"rules": [rule({"subject_equals": ["Hello"]}, {"move": "x"})]}
         self.assertIsNone(self.choose(cfg, subject="Hello there"))
