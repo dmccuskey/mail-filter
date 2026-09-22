@@ -19,6 +19,8 @@ rules.local.json5
 
 The `.local.json5` files contain the actual deployment configuration.
 
+The `.local.json5` files must be located in the same directory as `mail_filter.py` and `list_folders.py`; both scripts resolve them relative to their own location.
+
 ## Accounts
 
 `accounts.local.json5` defines the IMAP accounts processed by the engine.

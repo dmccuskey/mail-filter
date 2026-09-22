@@ -1,5 +1,6 @@
 import sys
 import imaplib
+from pathlib import Path
 
 try:
     import json5 as json_parser
@@ -7,7 +8,7 @@ except ImportError:
     import json as json_parser
 
 
-CONFIG_FILE = "accounts.local.json5"
+CONFIG_FILE = Path(__file__).resolve().parent / "accounts.local.json5"
 
 if len(sys.argv) < 2:
     print("Usage: python list_folders.py <account_id>")

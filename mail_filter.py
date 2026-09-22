@@ -5,6 +5,7 @@ import email
 from email.utils import getaddresses
 from email.header import decode_header
 from datetime import datetime
+from pathlib import Path
 
 try:
     import json5 as json_parser
@@ -419,11 +420,11 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
 
 
 def main():
-    base = "/home/pi/mail-filter"  # adjust if you use a different path
+    base = Path(__file__).resolve().parent  # directory containing this script
 
-    accounts_cfg = load_json(f"{base}/accounts.local.json5")
-    folders_cfg_all = load_json(f"{base}/folders.local.json5")["folders"]
-    rules_all = load_json(f"{base}/rules.local.json5")
+    accounts_cfg = load_json(base / "accounts.local.json5")
+    folders_cfg_all = load_json(base / "folders.local.json5")["folders"]
+    rules_all = load_json(base / "rules.local.json5")
 
     for account in accounts_cfg["accounts"]:
         account_id = account["id"]

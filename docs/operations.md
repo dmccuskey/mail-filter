@@ -8,13 +8,13 @@ The main program is:
 python3 mail_filter.py
 ```
 
-The deployed script currently uses:
+The script loads `accounts.local.json5`, `folders.local.json5`, and `rules.local.json5` from the directory containing `mail_filter.py`, regardless of the current working directory.
+
+On the Raspberry Pi deployment, this is:
 
 ```text
 /home/pi/mail-filter
 ```
-
-as its base configuration directory.
 
 ## Dry Run
 
@@ -50,7 +50,7 @@ This is intended for troubleshooting rather than normal operation.
 
 `list_folders.py` can inspect the mailboxes available on a configured account.
 
-It uses the account information from `accounts.local.json5`.
+It uses the account information from `accounts.local.json5`, loaded from the directory containing `list_folders.py`, regardless of the current working directory.
 
 Usage:
 
