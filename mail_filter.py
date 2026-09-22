@@ -301,7 +301,8 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
         return
 
     # Only act on unseen messages so we don't re-process old mail
-    status, msgs = imap.search(None, "UNSEEN")
+    # UIDs (not sequence numbers) so message identity survives EXPUNGE
+    status, msgs = imap.uid("SEARCH", "UNSEEN")
     if status != "OK":
         log(f"[{account_id}] ERROR: search UNSEEN failed (status={status})")
         imap.logout()
@@ -310,11 +311,11 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
     ids = msgs[0].split()
     log(f"[{account_id}] Found {len(ids)} unseen messages")
 
-    for msg_id in ids:
+    for uid in ids:
         # Use PEEK so we don't mark as Seen just by fetching
-        status, data = imap.fetch(msg_id, "(BODY.PEEK[])")
+        status, data = imap.uid("FETCH", uid, "(BODY.PEEK[])")
         if status != "OK":
-            log(f"[{account_id}] ERROR: fetch {msg_id} failed (status={status})")
+            log(f"[{account_id}] ERROR: fetch {uid} failed (status={status})")
             continue
 
         msg = email.message_from_bytes(data[0][1])
@@ -349,7 +350,7 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
         # rule = choose_rule(addresses, subject, from_addr, rules_cfg)
         rule = choose_rule(addresses, subject, from_addr, from_name, rules_cfg)
         if not rule:
-            log(f"[{account_id}] No rule for message {msg_id} (subject='{subject}')")
+            log(f"[{account_id}] No rule for message {uid} (subject='{subject}')")
             continue
 
         rule_name = rule.get("name", "<unnamed>")
@@ -368,7 +369,7 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
                 continue
 
             log(
-                f"[{account_id}] [{rule_name}] Message {msg_id}: '{subject}' "
+                f"[{account_id}] [{rule_name}] Message {uid}: '{subject}' "
                 f"→ {target_mailbox} (mark_read={mark_read})"
             )
 
@@ -376,9 +377,9 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
                 continue
 
             if mark_read:
-                imap.store(msg_id, "+FLAGS", "\\Seen")
+                imap.uid("STORE", uid, "+FLAGS", "(\\Seen)")
 
-            status, _ = imap.copy(msg_id, f'"{target_mailbox}"')
+            status, _ = imap.uid("COPY", uid, f'"{target_mailbox}"')
             if status != "OK":
                 log(
                     f"[{account_id}] [{rule_name}] ERROR: copy to "
@@ -387,13 +388,13 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
                 continue
 
             # Mark original as deleted; expunge at end
-            imap.store(msg_id, "+FLAGS", "\\Deleted")
+            imap.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
             continue
 
         # --- DELETE action (only if no move) ---
         if delete_flag and move_key is None:
             log(
-                f"[{account_id}] [{rule_name}] Message {msg_id}: '{subject}' "
+                f"[{account_id}] [{rule_name}] Message {uid}: '{subject}' "
                 f"→ DELETE (mark_read={mark_read})"
             )
 
@@ -401,14 +402,14 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
                 continue
 
             if mark_read:
-                imap.store(msg_id, "+FLAGS", "\\Seen")
+                imap.uid("STORE", uid, "+FLAGS", "(\\Seen)")
 
-            imap.store(msg_id, "+FLAGS", "\\Deleted")
+            imap.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
             continue
 
         # No move, no delete -> nothing to do
         log(
-            f"[{account_id}] [{rule_name}] Message {msg_id}: '{subject}' "
+            f"[{account_id}] [{rule_name}] Message {uid}: '{subject}' "
             f"→ no action (rule has neither move nor delete)"
         )
 

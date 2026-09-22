@@ -35,6 +35,7 @@ It currently:
 - supports `delete`
 - supports `mark_read`
 - supports catch-all rules
+- identifies messages by IMAP UID throughout processing
 - performs EXPUNGE after the processing loop
 
 This baseline should remain easy to restore.
@@ -62,22 +63,22 @@ Before implementation, each feature should be defined in terms of:
 
 ## UID Migration
 
-The next infrastructure change is migrating message operations from sequence numbers to UIDs.
+Message operations have been migrated from sequence numbers to UIDs (checkpoint 1).
 
 The motivation is to make message identity robust when EXPUNGE occurs during processing.
 
-The migration should cover all message-specific operations consistently.
-
-Target operations include:
+The migration covers all message-specific operations consistently:
 
 ```text
-search
-fetch
-store
-copy
+UID SEARCH
+UID FETCH
+UID STORE
+UID COPY
 ```
 
-The migration should be committed independently before changing Gmail move behavior.
+`EXPUNGE` is unchanged and still runs after the processing loop.
+
+The migration is unit-tested; live verification on the deployed accounts should be completed and committed independently before changing Gmail move behavior.
 
 ## Gmail Move Handling
 
@@ -99,6 +100,12 @@ Do not assume that behavior which is correct for Gmail is harmless on every othe
 
 ## Testing Strategy
 
+Unit tests use only the standard library and a fake IMAP connection (no network or credentials):
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
 For changes affecting message identity or deletion:
 
 1. Start from the known-good baseline.
@@ -119,7 +126,7 @@ Known-good current implementation
         │
         ▼
 CHECKPOINT 1
-UID migration
+UID migration (implemented; live verification pending)
         │
         ▼
 CHECKPOINT 2

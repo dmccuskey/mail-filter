@@ -199,4 +199,4 @@ The durable records for the project's accepted architectural decisions are in [d
 - [ADR 003: Logical Folder Abstraction](decisions/003-logical-folder-abstraction.md)
 - [ADR 004: Ordered First-Match Rule Evaluation](decisions/004-first-match-rule-evaluation.md)
 
-UID migration remains proposed, and Gmail move semantics remain open; neither is an accepted ADR yet.
+UID migration has been implemented and will be recorded as an ADR after live verification; Gmail move semantics remain open.

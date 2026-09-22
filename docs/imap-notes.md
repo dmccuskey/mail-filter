@@ -11,12 +11,14 @@ The current processing sequence is:
 ```text
 LOGIN
 SELECT INBOX
-SEARCH UNSEEN
-FETCH
-process
+UID SEARCH UNSEEN
+UID FETCH
+process (UID STORE / UID COPY)
 EXPUNGE
 LOGOUT
 ```
+
+Messages are identified by IMAP UID throughout processing (see [UID Migration](#uid-migration)).
 
 ## Message Fetching
 
@@ -33,8 +35,8 @@ This allows the message contents to be inspected without making the message read
 The current implementation performs a move as:
 
 ```text
-COPY message → target mailbox
-mark original \Deleted
+UID COPY message → target mailbox
+UID STORE original +FLAGS (\Deleted)
 ```
 
 After all messages for the account have been processed:
@@ -85,18 +87,21 @@ Therefore, introducing an EXPUNGE inside the message-processing loop can change 
 
 IMAP UIDs provide a stable message identifier within the mailbox's UID validity scope.
 
-The planned migration is to use UID commands for operations such as:
+The UID migration has been implemented. All message-level operations use `imaplib`'s `uid()` form:
 
 ```text
-UID SEARCH
-UID FETCH
-UID STORE
-UID COPY
+UID SEARCH UNSEEN
+UID FETCH <uid> (BODY.PEEK[])
+UID STORE <uid> +FLAGS (\Seen)
+UID STORE <uid> +FLAGS (\Deleted)
+UID COPY <uid> "<target mailbox>"
 ```
 
-rather than sequence-number commands.
+The UID returned by the search is used for every subsequent operation on that message; it is never converted back to a sequence number.
 
-The UID migration should occur before introducing a processing model that expunges messages during iteration.
+`EXPUNGE` remains the plain, mailbox-level command and still runs once after the processing loop. The migration changed message identity only, not processing behavior.
+
+The UID migration is a prerequisite for any processing model that expunges messages during iteration. It has been unit-tested against a fake IMAP connection; live verification on the deployed accounts is still pending.
 
 ## Important Baseline Constraint
 

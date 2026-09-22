@@ -42,6 +42,8 @@ mail-filter/
 │       ├── 002-configuration-driven-filtering.md
 │       ├── 003-logical-folder-abstraction.md
 │       └── 004-first-match-rule-evaluation.md
+├── tests/
+│   └── test_mail_filter.py
 └── README.md
 ```
 
@@ -87,7 +89,7 @@ Development checkpoints, planned changes, and the roadmap for UID migration and 
 
 The current implementation is the known-good live baseline.
 
-The next planned infrastructure change is migration from IMAP sequence numbers to UIDs. Gmail-specific move/EXPUNGE behavior will be addressed separately after that change has been verified.
+Message operations now use IMAP UIDs rather than sequence numbers (live verification pending). Gmail-specific move/EXPUNGE behavior will be addressed separately after that change has been verified.
 
 The project intentionally keeps those changes separate so the current live filtering system remains easy to revert.
 
