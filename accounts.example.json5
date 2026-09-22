@@ -1,0 +1,18 @@
+{
+  // Each account has a stable ID used by folders.local.json5 and rules.local.json5.
+  // Keep credentials only in accounts.local.json5.
+  "accounts": [
+    {
+      "id": "aerospace-account",
+      "imap_host": "premium147.web-hosting.com",
+      "username": "inbox@aerospace.biz",
+      "password": "REPLACE_WITH_PASSWORD"
+    },
+    {
+      "id": "gmail-main",
+      "imap_host": "imap.gmail.com",
+      "username": "your-address@gmail.com",
+      "password": "REPLACE_WITH_PASSWORD"
+    }
+  ]
+}

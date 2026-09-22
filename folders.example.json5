@@ -1,0 +1,21 @@
+{
+  // Folder mappings are per account.
+  //
+  // The keys on the left are logical folder names used by rules.
+  // The values on the right are the actual IMAP mailbox names.
+
+  "folders": {
+    "aerospace-account": {
+      "inbox": "INBOX",
+      "health_delete": "INBOX.Health.To Delete",
+      "services_payments": "INBOX.Services.Payments",
+      "catch_all": "INBOX.Archive"
+    },
+
+    "gmail-main": {
+      "inbox": "INBOX",
+      "github_main": "GitHub",
+      "promotions": "[Gmail]/Promotions"
+    }
+  }
+}
