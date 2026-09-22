@@ -189,3 +189,14 @@ The major architectural steps were:
 8. Identify Gmail's label-based behavior as a special case requiring further work.
 
 The current implementation is the baseline for future changes.
+
+## Architecture Decisions
+
+The durable records for the project's accepted architectural decisions are in [decisions/](decisions/):
+
+- [ADR 001: Headless Raspberry Pi / Python IMAP Architecture](decisions/001-headless-pi-python-imap.md)
+- [ADR 002: Configuration-Driven Filtering and Configuration Organization](decisions/002-configuration-driven-filtering.md)
+- [ADR 003: Logical Folder Abstraction](decisions/003-logical-folder-abstraction.md)
+- [ADR 004: Ordered First-Match Rule Evaluation](decisions/004-first-match-rule-evaluation.md)
+
+UID migration remains proposed, and Gmail move semantics remain open; neither is an accepted ADR yet.
