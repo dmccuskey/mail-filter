@@ -198,5 +198,6 @@ The durable records for the project's accepted architectural decisions are in [d
 - [ADR 002: Configuration-Driven Filtering and Configuration Organization](decisions/002-configuration-driven-filtering.md)
 - [ADR 003: Logical Folder Abstraction](decisions/003-logical-folder-abstraction.md)
 - [ADR 004: Ordered First-Match Rule Evaluation](decisions/004-first-match-rule-evaluation.md)
+- [ADR 005: Identify Messages by IMAP UID](decisions/005-uid-based-message-identification.md)
 
-UID migration has been implemented and will be recorded as an ADR after live verification; Gmail move semantics remain open.
+Gmail move semantics remain open and are not yet an accepted ADR.

@@ -101,7 +101,7 @@ The UID returned by the search is used for every subsequent operation on that me
 
 `EXPUNGE` remains the plain, mailbox-level command and still runs once after the processing loop. The migration changed message identity only, not processing behavior.
 
-The UID migration is a prerequisite for any processing model that expunges messages during iteration. It has been unit-tested against a fake IMAP connection; live verification on the deployed accounts is still pending.
+The UID migration is a prerequisite for any processing model that expunges messages during iteration. It has been verified by unit tests and on the deployed accounts, and is recorded in [ADR 005](decisions/005-uid-based-message-identification.md).
 
 ## Important Baseline Constraint
 

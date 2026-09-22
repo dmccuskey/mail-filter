@@ -21,6 +21,6 @@ The program is configuration-driven: it connects to an account, selects its `INB
 
 ## Notes
 
-The present message-identity model uses IMAP sequence numbers. Migrating message-specific operations to IMAP UIDs is a **proposed** future change, not part of this accepted decision.
+Message identity was originally based on IMAP sequence numbers. This has been superseded by [ADR 005](005-uid-based-message-identification.md), which identifies messages by IMAP UID.
 
 Gmail's label-oriented move behavior is an **open** design question. It will be evaluated separately after the UID migration has been implemented and verified.

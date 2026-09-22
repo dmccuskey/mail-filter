@@ -155,7 +155,7 @@ Before changing filtering behavior:
 
 Avoid combining unrelated IMAP behavior changes into a single checkpoint.
 
-This is especially important for the planned UID and Gmail changes.
+This is especially important for IMAP behavior changes such as the planned Gmail move handling.
 
 ## Recovery
 

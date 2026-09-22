@@ -78,7 +78,7 @@ UID COPY
 
 `EXPUNGE` is unchanged and still runs after the processing loop.
 
-The migration is unit-tested; live verification on the deployed accounts should be completed and committed independently before changing Gmail move behavior.
+The migration has been verified by unit tests and on the deployed accounts, and is recorded in [ADR 005](decisions/005-uid-based-message-identification.md).
 
 ## Gmail Move Handling
 
@@ -126,7 +126,7 @@ Known-good current implementation
         │
         ▼
 CHECKPOINT 1
-UID migration (implemented; live verification pending)
+UID migration (complete; ADR 005)
         │
         ▼
 CHECKPOINT 2
