@@ -131,7 +131,7 @@ def local_part_matches(addresses, match_cfg):
     return False
 
 
-def choose_rule(addresses, subject, from_addr, rules_cfg):
+def choose_rule(addresses, subject, from_addr, from_name, rules_cfg):
     """
     Unified rule engine with per-account config and match/do structure.
 
@@ -152,6 +152,7 @@ def choose_rule(addresses, subject, from_addr, rules_cfg):
     """
     subject_lower = (subject or "").lower()
     from_lower = (from_addr or "").lower()
+    from_name_lower = (from_name or "").lower()
 
     rules = rules_cfg.get("rules", [])
     catch_all_cfg = rules_cfg.get("catch_all")
@@ -161,29 +162,38 @@ def choose_rule(addresses, subject, from_addr, rules_cfg):
         match_cfg = rule.get("match", {}) or {}
         do_cfg = rule.get("do", {}) or {}
 
-        if DEV_LOGS: log(f"addresses")
         # 1) Address matching (local-part based)
         if not local_part_matches(addresses, match_cfg):
             continue
 
-        if DEV_LOGS: log(f"from constrains")
-        # 2) From constraints
+        # 2) From address constraints
         from_tokens = match_cfg.get("from_contains", [])
-        if not contains_any(from_lower, from_tokens):
+        if from_tokens and not contains_any(from_lower, from_tokens):
             continue
 
-        if DEV_LOGS: log(f"subject constrains")
-        # 3) Subject constraints
+        # 3) From name constraints
+        from_name_tokens = match_cfg.get("from_name_contains", [])
+        if from_name_tokens and not contains_any(from_name_lower, from_name_tokens):
+            continue
+
+        # 4) Subject constraints
         subj_tokens = match_cfg.get("subject_contains", [])
-        if not contains_any(subject_lower, subj_tokens):
+        if subj_tokens and not contains_any(subject_lower, subj_tokens):
             continue
 
+        # 4b) Subject equals constraints
+        subj_equals = match_cfg.get("subject_equals", [])
+        if subj_equals:
+            if isinstance(subj_equals, str):
+                subj_equals = [subj_equals]
+            if not any(subject_lower == target.lower() for target in subj_equals):
+                continue
+            
         # If we reach here, rule matches
         move_key = do_cfg.get("move")
         delete_flag = bool(do_cfg.get("delete", False))
         mark_read = bool(do_cfg.get("mark_read", False))
 
-        # If move is present, ignore delete (move wins)
         if move_key is not None and delete_flag:
             log(
                 f"[{rule_name}] Warning: rule has both move and delete=true; "
@@ -197,6 +207,53 @@ def choose_rule(addresses, subject, from_addr, rules_cfg):
             "delete": delete_flag,
             "mark_read": mark_read,
         }
+    # subject_lower = (subject or "").lower()
+    # from_lower = (from_addr or "").lower()
+
+    # rules = rules_cfg.get("rules", [])
+    # catch_all_cfg = rules_cfg.get("catch_all")
+
+    # for rule in rules:
+    #     rule_name = rule.get("name", "<unnamed>")
+    #     match_cfg = rule.get("match", {}) or {}
+    #     do_cfg = rule.get("do", {}) or {}
+
+    #     if DEV_LOGS: log(f"addresses")
+    #     # 1) Address matching (local-part based)
+    #     if not local_part_matches(addresses, match_cfg):
+    #         continue
+
+    #     if DEV_LOGS: log(f"from constrains")
+    #     # 2) From constraints
+    #     from_tokens = match_cfg.get("from_contains", [])
+    #     if not contains_any(from_lower, from_tokens):
+    #         continue
+
+    #     if DEV_LOGS: log(f"subject constrains")
+    #     # 3) Subject constraints
+    #     subj_tokens = match_cfg.get("subject_contains", [])
+    #     if not contains_any(subject_lower, subj_tokens):
+    #         continue
+
+    #     # If we reach here, rule matches
+    #     move_key = do_cfg.get("move")
+    #     delete_flag = bool(do_cfg.get("delete", False))
+    #     mark_read = bool(do_cfg.get("mark_read", False))
+
+    #     # If move is present, ignore delete (move wins)
+    #     if move_key is not None and delete_flag:
+    #         log(
+    #             f"[{rule_name}] Warning: rule has both move and delete=true; "
+    #             "ignoring delete"
+    #         )
+    #         delete_flag = False
+
+    #     return {
+    #         "name": rule_name,
+    #         "move": move_key,
+    #         "delete": delete_flag,
+    #         "mark_read": mark_read,
+    #     }
 
     # No rule matched → catch-all?
     if catch_all_cfg:
@@ -272,12 +329,24 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
         if DEV_LOGS: log(f"[{account_id}] Decoded subject: {subject}")
 
         # From (single address)
+        # from_raw = msg.get("From", "") or ""
+        # from_addrs = [a.lower() for _, a in getaddresses([from_raw])]
+        # from_addr = from_addrs[0] if from_addrs else ""
+
+        # From (parsed into display name and email address)
         from_raw = msg.get("From", "") or ""
-        from_addrs = [a.lower() for _, a in getaddresses([from_raw])]
-        from_addr = from_addrs[0] if from_addrs else ""
+        parsed_from = getaddresses([from_raw])
+        if parsed_from:
+            from_name_raw, from_addr = parsed_from[0]
+            from_name = decode_mime_header(from_name_raw).lower()
+            from_addr = from_addr.lower()
+        else:
+            from_name = ""
+            from_addr = ""
 
         # Decide rule
-        rule = choose_rule(addresses, subject, from_addr, rules_cfg)
+        # rule = choose_rule(addresses, subject, from_addr, rules_cfg)
+        rule = choose_rule(addresses, subject, from_addr, from_name, rules_cfg)
         if not rule:
             log(f"[{account_id}] No rule for message {msg_id} (subject='{subject}')")
             continue
@@ -350,11 +419,11 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
 
 
 def main():
-    base = "/home/pi/mailfilter"  # adjust if you use a different path
+    base = "/home/pi/mail-filter"  # adjust if you use a different path
 
-    accounts_cfg = load_json(f"{base}/accounts.json5")
-    folders_cfg_all = load_json(f"{base}/folders.json5")["folders"]
-    rules_all = load_json(f"{base}/rules.json5")
+    accounts_cfg = load_json(f"{base}/accounts.local.json5")
+    folders_cfg_all = load_json(f"{base}/folders.local.json5")["folders"]
+    rules_all = load_json(f"{base}/rules.local.json5")
 
     for account in accounts_cfg["accounts"]:
         account_id = account["id"]
