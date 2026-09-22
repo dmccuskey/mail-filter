@@ -36,7 +36,12 @@ mail-filter/
 │   ├── rule-reference.md
 │   ├── operations.md
 │   ├── imap-notes.md
-│   └── development.md
+│   ├── development.md
+│   └── decisions/
+│       ├── 001-headless-pi-python-imap.md
+│       ├── 002-configuration-driven-filtering.md
+│       ├── 003-logical-folder-abstraction.md
+│       └── 004-first-match-rule-evaluation.md
 └── README.md
 ```
 
