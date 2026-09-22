@@ -4,42 +4,45 @@
   //
   // Different match fields are ANDed.
   // Array values for supported "contains" matchers are ORed.
+  // A single string is treated as a one-item array.
   // Matching is case-insensitive.
 
-  "rules": {
-    "aerospace-account": [
+  "aerospace-account": {
+    "rules": [
       {
         "name": "Health messages",
         "match": {
-          "subject_contains": ["health"]
+          "subject_contains": ["health"],
         },
         "do": {
-          "delete": true
-        }
+          "delete": true,
+        },
       },
 
       {
         "name": "Services payments",
         "match": {
-          "to": "payments@aerospace.biz"
+          "to": ["payments@aerospace.biz"],
         },
         "do": {
           "move": "services_payments",
-          "mark_read": true
-        }
-      }
+          "mark_read": true,
+        },
+      },
     ],
+  },
 
-    "gmail-main": [
+  "gmail-main": {
+    "rules": [
       {
         "name": "GitHub mail",
         "match": {
-          "from_contains": ["github.com"]
+          "from_contains": ["github.com"],
         },
         "do": {
-          "move": "github_main"
-        }
-      }
-    ]
-  }
+          "move": "github_main",
+        },
+      },
+    ],
+  },
 }
