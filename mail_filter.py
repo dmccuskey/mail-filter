@@ -325,7 +325,7 @@ def resolve_trash_mailbox(imap, account_id, folder_map):
     """
     Resolve the reserved Trash role for an account (ADR 006):
       1. the account's explicit "trash" folder mapping, if present
-      2. otherwise the mailbox the server advertises with \Trash
+      2. otherwise the mailbox the server advertises with \\Trash
     Returns (mailbox, None), or (None, reason) if neither is available.
     """
     configured = folder_map.get("trash")
