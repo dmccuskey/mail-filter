@@ -23,4 +23,4 @@ The program is configuration-driven: it connects to an account, selects its `INB
 
 Message identity was originally based on IMAP sequence numbers. This has been superseded by [ADR 005](005-uid-based-message-identification.md), which identifies messages by IMAP UID.
 
-Gmail's label-oriented move and Trash behavior is addressed by [ADR 006](006-gmail-move-and-trash-semantics.md); production verification remains a separate checkpoint.
+Gmail's label-oriented move behavior and the explicit Trash action are addressed by [ADR 006](006-gmail-move-and-trash-semantics.md).

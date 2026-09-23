@@ -1,6 +1,6 @@
 # ADR 006: Gmail Move Semantics and an Explicit Trash Action
 
-**Status:** Proposed
+**Status:** Accepted
 
 ## Context
 
@@ -80,4 +80,4 @@ Alternatives not adopted:
 - `UID STORE +X-GM-LABELS (\Trash)`: avoids a mailbox name, but is not described in Google's extension documentation and would replace the verified Gmail operation.
 - `LIST ... RETURN (SPECIAL-USE)`: requires LIST-EXTENDED and private `imaplib` internals. Both production servers include `\Trash` in a plain `LIST`.
 
-Unit tests assert the exact IMAP command sequences for generic and Gmail `move`, `trash`, and `delete`, Trash resolution against `LIST` data in the shapes `imaplib` returns, and the failure paths above. Gmail `trash` with a configured `trash` mapping has been verified live. The decision becomes Accepted after live verification of Gmail `move`, of `trash` through server-advertised `\Trash` on both production accounts, and a regression check on the non-Gmail account.
+The decision was verified through automated tests using a fake IMAP connection that returns responses in the shapes `imaplib` returns and asserts the exact IMAP command sequences for generic and Gmail `move`, `trash`, and `delete`, Trash resolution, and the failure paths above; and through live testing against the Gmail and non-Gmail production accounts, including Gmail `move`, `trash` through both a configured `trash` mapping and the server-advertised `\Trash` mailbox, and the generic `move` and `delete` behavior.

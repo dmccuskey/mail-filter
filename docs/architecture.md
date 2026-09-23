@@ -204,5 +204,3 @@ The durable records for the project's accepted architectural decisions are in [d
 - [ADR 004: Ordered First-Match Rule Evaluation](decisions/004-first-match-rule-evaluation.md)
 - [ADR 005: Identify Messages by IMAP UID](decisions/005-uid-based-message-identification.md)
 - [ADR 006: Gmail Move Semantics and an Explicit Trash Action](decisions/006-gmail-move-and-trash-semantics.md)
-
-ADR 006 is Proposed until it has been verified against the deployed Gmail account.

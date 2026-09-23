@@ -134,7 +134,7 @@ The UID migration is a prerequisite for any processing model that expunges messa
 
 The current system is live.
 
-Therefore the following should remain separate checkpoints:
+Therefore the following were kept as separate checkpoints:
 
 ```text
 current implementation
@@ -148,8 +148,8 @@ Gmail move and Trash behavior (ADR 006)
 verification
 ```
 
-Keep the UID migration and Gmail move/Trash verification as separate checkpoints.
+The UID migration and the Gmail move/Trash change were implemented and verified as separate checkpoints.
 
 ## Gmail Move and Trash Decision
 
-The Gmail move and Trash behavior is recorded in [ADR 006](decisions/006-gmail-move-and-trash-semantics.md). It remains Proposed until verified against the deployed Gmail account.
+The Gmail move and Trash behavior is recorded in [ADR 006](decisions/006-gmail-move-and-trash-semantics.md) and has been verified on both production accounts.

@@ -84,7 +84,7 @@ The migration has been verified by unit tests and on the deployed accounts, and 
 
 ## Gmail Move and Trash Handling
 
-Gmail move handling and the `trash` action are implemented as proposed in [ADR 006](decisions/006-gmail-move-and-trash-semantics.md). Live verification is the remaining checkpoint.
+Gmail move handling and the `trash` action have been implemented and verified on the deployed accounts, and are recorded in [ADR 006](decisions/006-gmail-move-and-trash-semantics.md).
 
 The goal is to ensure that a message:
 
@@ -132,7 +132,7 @@ UID migration (complete; ADR 005)
         │
         ▼
 CHECKPOINT 2
-Gmail move / Trash behavior (ADR 006; live verification pending)
+Gmail move / Trash behavior (complete; ADR 006)
         │
         ▼
 CHECKPOINT 3
