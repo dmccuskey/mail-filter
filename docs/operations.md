@@ -192,6 +192,7 @@ Example:
 
 ```text
 /home/pi/mail-filter/mail_filter.log {
+    su pi pi
     daily
     rotate 14
     compress
@@ -207,6 +208,13 @@ This should be installed under:
 ```text
 /etc/logrotate.d/mail-filter
 ```
+
+Keep the `su pi pi` line (use your own user and group if not `pi`). It makes
+logrotate rotate the file as the owning user rather than root. It is required
+when `/home/pi/mail-filter` is group- or world-writable (for example, created
+under a `umask` of `002`): without it, logrotate silently skips the file with
+"parent directory has insecure permissions". Check with
+`sudo logrotate -d /etc/logrotate.d/mail-filter`.
 
 ## Credentials
 
