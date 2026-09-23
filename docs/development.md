@@ -32,11 +32,13 @@ It currently:
 - supports `subject_contains`
 - supports `subject_equals`
 - supports `move`
+- supports `trash` (to the optional `trash` mapping, otherwise the server-advertised `\Trash` mailbox)
 - supports `delete`
 - supports `mark_read`
 - supports catch-all rules
 - identifies messages by IMAP UID throughout processing
-- performs EXPUNGE after the processing loop
+- uses Gmail label operations for `move` and `trash` on Gmail
+- performs EXPUNGE after the processing loop when a message was marked `\Deleted`
 
 This baseline should remain easy to restore.
 
@@ -80,9 +82,9 @@ UID COPY
 
 The migration has been verified by unit tests and on the deployed accounts, and is recorded in [ADR 005](decisions/005-uid-based-message-identification.md).
 
-## Gmail Move Handling
+## Gmail Move and Trash Handling
 
-Gmail move semantics are the next major IMAP behavior change.
+Gmail move handling and the `trash` action are implemented as proposed in [ADR 006](decisions/006-gmail-move-and-trash-semantics.md). Live verification is the remaining checkpoint.
 
 The goal is to ensure that a message:
 
@@ -94,7 +96,7 @@ is removed from the source INBOX
 
 with the expected Gmail label behavior.
 
-This may require Gmail-specific handling.
+On Gmail, `move` and `trash` copy the message (adding the destination label) and remove the `\Inbox` label with `X-GM-LABELS`, without relying on Gmail's configurable expunge behavior. Generic IMAP accounts keep COPY, `\Deleted`, and EXPUNGE.
 
 Do not assume that behavior which is correct for Gmail is harmless on every other IMAP server.
 
@@ -113,7 +115,7 @@ For changes affecting message identity or deletion:
 3. Test with `DRY_RUN` where applicable.
 4. Test non-destructive operations first.
 5. Verify behavior on the existing non-Gmail account(s).
-6. Verify Gmail independently.
+6. Verify Gmail independently: destination label added, `\Inbox` removed, other labels kept, no `\Deleted` flag, and Trash behavior for `trash`.
 7. Commit after successful verification.
 
 ## Development Checkpoints
@@ -130,7 +132,7 @@ UID migration (complete; ADR 005)
         │
         ▼
 CHECKPOINT 2
-Gmail move / EXPUNGE behavior
+Gmail move / Trash behavior (ADR 006; live verification pending)
         │
         ▼
 CHECKPOINT 3

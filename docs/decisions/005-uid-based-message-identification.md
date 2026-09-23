@@ -37,4 +37,4 @@ Mailbox-level operations are unchanged: login, mailbox selection, logout, and th
 
 The migration was verified through automated tests using a fake IMAP connection that fails on any sequence-number command, testing against development IMAP accounts on macOS, production testing on the Raspberry Pi, and normal cron execution on the production system. No behavioral differences were observed compared with the previous sequence-number implementation.
 
-Gmail-specific folder/label behavior remains a separate, open concern.
+Gmail-specific folder/label behavior is addressed separately in [ADR 006](006-gmail-move-and-trash-semantics.md).

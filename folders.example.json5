@@ -3,19 +3,25 @@
   //
   // The keys on the left are logical folder names used by rules.
   // The values on the right are the actual IMAP mailbox names.
+  //
+  // "trash" is optional: without it, the trash action uses the mailbox the
+  // server advertises with \Trash. Set it to override that, or for a server
+  // that does not advertise \Trash.
 
   "folders": {
     "aerospace-account": {
       "inbox": "INBOX",
       "health_delete": "INBOX.Health.To Delete",
       "services_payments": "INBOX.Services.Payments",
-      "catch_all": "INBOX.Archive"
+      "catch_all": "INBOX.Archive",
+      "trash": "INBOX.Trash"
     },
 
     "gmail-main": {
       "inbox": "INBOX",
       "github_main": "GitHub",
-      "promotions": "[Gmail]/Promotions"
+      "promotions": "[Gmail]/Promotions",
+      "trash": "[Gmail]/Trash"
     }
   }
 }

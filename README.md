@@ -88,9 +88,9 @@ Development checkpoints, planned changes, the completed UID migration, and the r
 
 ## Current Status
 
-The current implementation is the known-good live baseline.
+The UID-based implementation is the known-good live baseline. Gmail `trash` has been verified live with a configured `trash` mapping; Gmail `move` and server-advertised Trash resolution still need live verification before deployment.
 
-Message operations use IMAP UIDs rather than sequence numbers (see ADR 005). Gmail-specific move/EXPUNGE behavior is the next planned change.
+Message operations use IMAP UIDs rather than sequence numbers (see ADR 005). `move`, `trash`, and `delete` are distinct actions; on Gmail, `move` and `trash` remove the `\Inbox` label instead of using `\Deleted` and EXPUNGE (see ADR 006; live verification pending).
 
 The project intentionally keeps those changes separate so the current live filtering system remains easy to revert.
 

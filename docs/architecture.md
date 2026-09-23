@@ -15,8 +15,9 @@ The system:
 5. Extracts recipients, sender information, and subject.
 6. Evaluates the configured rules in order.
 7. Applies the first matching rule.
-8. Expunges messages marked for deletion or movement.
-9. Logs the result.
+8. Removes moved or trashed messages from `INBOX`: by removing the `\Inbox` label on Gmail, or by marking them `\Deleted` on other servers.
+9. Expunges messages marked `\Deleted`, once, after the processing loop.
+10. Logs the result.
 
 ## System Structure
 
@@ -94,7 +95,7 @@ validate configured folders
   ↓
 select INBOX
   ↓
-SEARCH UNSEEN
+UID SEARCH UNSEEN
   ↓
 process messages
   ↓
@@ -128,9 +129,9 @@ IMAP message
                     ▼
              first matching rule
                     │
-          ┌─────────┼─────────┐
-          ▼         ▼         ▼
-        move      delete    no-op
+        ┌─────────┬─┴───────┬─────────┐
+        ▼         ▼         ▼         ▼
+      move      trash     delete    no-op
 ```
 
 ## Rule Evaluation
@@ -151,12 +152,15 @@ Within a rule:
 The currently implemented actions are:
 
 - `move`
+- `trash`
 - `delete`
 - `mark_read`
 
-Move takes precedence over delete if both are specified.
+If more than one of `move`, `trash`, and `delete` is specified, the least destructive wins: `move`, then `trash`, then `delete`.
 
-If a rule matches but has neither a move nor delete action, the message is left unchanged.
+`trash` sends the message to the account's Trash mailbox: the optional `trash` mapping, otherwise the mailbox the server advertises with `\Trash`. On Gmail (detected by the `X-GM-EXT-1` capability), `move` and `trash` copy the message and remove its `\Inbox` label instead of using `\Deleted` and `EXPUNGE`. `delete` keeps the `\Deleted` plus `EXPUNGE` behavior on every provider. See [ADR 006](decisions/006-gmail-move-and-trash-semantics.md).
+
+If a rule matches with only `mark_read`, the message is marked read and stays in `INBOX`. If it has no action at all, the message is left unchanged.
 
 ## Safety Model
 
@@ -186,7 +190,7 @@ The major architectural steps were:
 5. Introduce an explicit `name` / `match` / `do` rule structure.
 6. Add prefix-based routing and ordered fall-through behavior.
 7. Add sender name and decoded-subject matching.
-8. Identify Gmail's label-based behavior as a special case requiring further work.
+8. Handle Gmail's label-based move behavior explicitly and add a separate `trash` action.
 
 The current implementation is the baseline for future changes.
 
@@ -199,5 +203,6 @@ The durable records for the project's accepted architectural decisions are in [d
 - [ADR 003: Logical Folder Abstraction](decisions/003-logical-folder-abstraction.md)
 - [ADR 004: Ordered First-Match Rule Evaluation](decisions/004-first-match-rule-evaluation.md)
 - [ADR 005: Identify Messages by IMAP UID](decisions/005-uid-based-message-identification.md)
+- [ADR 006: Gmail Move Semantics and an Explicit Trash Action](decisions/006-gmail-move-and-trash-semantics.md)
 
-Gmail move semantics remain open and are not yet an accepted ADR.
+ADR 006 is Proposed until it has been verified against the deployed Gmail account.

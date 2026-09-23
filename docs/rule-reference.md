@@ -206,17 +206,50 @@ EXPUNGE
 
 with the expunge occurring after the account's message-processing loop.
 
+On Gmail, the move is performed as:
+
+```text
+UID COPY (adds the destination label)
+UID STORE -X-GM-LABELS (\Inbox)
+```
+
+Gmail moves do not mark the message `\Deleted` or issue `EXPUNGE`, and the message keeps its other labels.
+
+If the server's capabilities cannot be read, the provider is unknown and the move is skipped (see [ADR 006](decisions/006-gmail-move-and-trash-semantics.md)).
+
+### `trash`
+
+Puts the message in the account's Trash, using the provider's Trash semantics.
+
+The Trash mailbox is resolved per account: the account's optional `trash` folder mapping if present, otherwise the mailbox the server advertises with the IMAP `\Trash` attribute. If neither is available, the message is logged and left untouched. See [Configuration](configuration.md).
+
+Example:
+
+```json5
+"do": {
+  "trash": true
+}
+```
+
+On a generic IMAP server, `trash` is performed like `move` to the Trash mailbox (copy, `\Deleted`, expunge).
+
+On Gmail, the message is copied to the Trash mailbox and its `\Inbox` label is removed, without `\Deleted` or `EXPUNGE`. Gmail then applies its own Trash behavior, including permanent removal after 30 days.
+
+`trash` is not the same as `delete`: on Gmail, `delete` usually archives the message rather than trashing it.
+
 ### `delete`
 
 Marks the message `\Deleted`.
 
 The message is physically removed when the account is expunged.
 
+On Gmail, the result of an expunge depends on the account's IMAP settings; by default the message is archived (it remains in All Mail). Use `trash` to send a message to Trash.
+
 ### `mark_read`
 
 Marks the message `\Seen`.
 
-Example:
+It can be combined with `move`, `trash`, or `delete`, in which case the message is marked read before it is copied or deleted:
 
 ```json5
 "do": {
@@ -225,9 +258,19 @@ Example:
 }
 ```
 
-## Move vs Delete
+It can also be used on its own. The message is marked read and stays in `INBOX`:
 
-If both are specified:
+```json5
+"do": {
+  "mark_read": true
+}
+```
+
+Because the filter only processes unseen messages, a message marked read is not evaluated again on later runs.
+
+## Conflicting Actions
+
+If more than one of `move`, `trash`, and `delete` is specified:
 
 ```json5
 "do": {
@@ -236,9 +279,9 @@ If both are specified:
 }
 ```
 
-move takes precedence.
+the least destructive action wins: `move`, then `trash`, then `delete`.
 
-The implementation logs a warning and ignores `delete`.
+The implementation logs a warning and ignores the lower-precedence actions. `mark_read` is independent and still applies.
 
 ## Catch-All
 

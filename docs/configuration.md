@@ -91,6 +91,14 @@ The left-hand value is the stable key used by rules.
 
 The right-hand value is the actual mailbox name understood by the IMAP server.
 
+The key `trash` is reserved for the `trash` action and is optional. Trash is a role the server defines, so it is resolved differently from ordinary logical folders:
+
+1. the account's `trash` mapping, if present;
+2. otherwise the mailbox the server advertises with the IMAP `\Trash` attribute (for example `[Gmail]/Trash` or `INBOX.Trash`);
+3. otherwise the `trash` action is skipped for that account.
+
+Add a `trash` mapping only to override the server's Trash mailbox, or for a server that does not advertise `\Trash`. To see what a server advertises, run `python3 list_folders.py <account_id>` and look for `\Trash` in the attributes. Ordinary logical folders are never discovered from the server.
+
 This abstraction allows the same rule vocabulary to work with different mailbox naming conventions.
 
 For example:
@@ -111,7 +119,7 @@ If a mailbox cannot be selected, a warning is logged.
 
 The script then re-selects `INBOX` before processing messages.
 
-A missing mapping referenced by a move rule is also logged and that message is skipped.
+A missing mapping referenced by a move rule is also logged and that message is skipped. A `trash` action whose Trash mailbox cannot be resolved is logged and skipped.
 
 ## Rules
 

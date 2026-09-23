@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import imaplib
 import email
+import re
 # import json
 from email.utils import getaddresses
 from email.header import decode_header
@@ -54,6 +55,79 @@ def ensure_folders_exist(imap, account_id, folder_map):
 
     # Re-select INBOX for normal processing
     imap.select("INBOX")
+
+
+def detect_gmail(imap):
+    """
+    Return True if the server advertises Gmail's X-GM-EXT-1 capability,
+    False if it does not, or None if the capability query failed.
+    None means the provider is unknown; callers must not assume generic IMAP.
+    """
+    try:
+        status, data = imap.capability()
+    except (imaplib.IMAP4.error, OSError):
+        return None
+    if status != "OK" or not data or not data[0]:
+        return None
+    line = data[0]
+    if isinstance(line, str):
+        line = line.encode("ascii", errors="ignore")
+    # imaplib returns the capabilities as one space-separated line
+    return b"X-GM-EXT-1" in line.upper().split()
+
+
+# A LIST response line as imaplib returns it (no "* LIST" prefix):
+#   (\HasNoChildren \Trash) "/" "[Gmail]/Trash"
+#   (\HasNoChildren \UnMarked \Trash) "." INBOX.Trash
+# A mailbox name sent as a literal arrives as a tuple:
+#   (b'(\HasNoChildren \Trash) "/" {9}', b'Corbeille')
+LIST_LINE = re.compile(rb'^\((?P<attrs>[^)]*)\) (?:"(?:[^"\\]|\\.)*"|NIL) (?P<name>.+)$')
+
+
+def find_advertised_trash(imap):
+    """
+    Return (mailbox, None) for the one mailbox the server advertises with the
+    RFC 6154 \\Trash attribute, or (None, reason) if it cannot be determined.
+    The name is returned exactly as the server sent it; nothing is guessed.
+    """
+    try:
+        status, entries = imap.list()
+    except (imaplib.IMAP4.error, OSError) as e:
+        return None, f"LIST failed ({e})"
+    if status != "OK":
+        return None, f"LIST failed (status={status})"
+
+    found = []
+    for entry in entries or []:
+        if entry is None:  # imaplib's result when there are no mailboxes
+            continue
+        if isinstance(entry, tuple):
+            head, literal_name = entry[0], entry[1]
+        else:
+            head, literal_name = entry, None
+        match = LIST_LINE.match(head)
+        if not match:
+            continue
+        if b"\\trash" not in match.group("attrs").lower().split():
+            continue
+        name = literal_name if literal_name is not None else match.group("name")
+        if literal_name is None and name.startswith(b'"') and name.endswith(b'"'):
+            name = name[1:-1]
+        found.append(name)
+
+    if not found:
+        return None, "server advertises no \\Trash mailbox"
+    if len(found) > 1:
+        return None, f"server advertises {len(found)} \\Trash mailboxes"
+    name = found[0]
+    # Mailboxes are quoted as "<name>" in COPY; refuse names that cannot be
+    # quoted that way rather than risk a malformed command.
+    if b'"' in name or b"\\" in name:
+        return None, f"advertised \\Trash name {name!r} cannot be quoted safely"
+    try:
+        return name.decode("ascii"), None
+    except UnicodeDecodeError:
+        return None, f"advertised \\Trash name {name!r} is not ASCII"
 
 
 def as_list(value):
@@ -158,6 +232,7 @@ def choose_rule(addresses, subject, from_addr, from_name, rules_cfg):
       {
         "name": rule_name,
         "move": <folder_key or None>,
+        "trash": bool,
         "delete": bool,
         "mark_read": bool
       }
@@ -202,19 +277,24 @@ def choose_rule(addresses, subject, from_addr, from_name, rules_cfg):
             
         # If we reach here, rule matches
         move_key = do_cfg.get("move")
+        trash_flag = bool(do_cfg.get("trash", False))
         delete_flag = bool(do_cfg.get("delete", False))
         mark_read = bool(do_cfg.get("mark_read", False))
 
-        if move_key is not None and delete_flag:
+        if move_key is not None and (trash_flag or delete_flag):
             log(
-                f"[{rule_name}] Warning: rule has both move and delete=true; "
-                "ignoring delete"
+                f"Warning: RULE='{rule_name}' has move with trash/delete; using move"
             )
+            trash_flag = False
+            delete_flag = False
+        elif trash_flag and delete_flag:
+            log(f"Warning: RULE='{rule_name}' has trash with delete; using trash")
             delete_flag = False
 
         return {
             "name": rule_name,
             "move": move_key,
+            "trash": trash_flag,
             "delete": delete_flag,
             "mark_read": mark_read,
         }
@@ -269,24 +349,141 @@ def choose_rule(addresses, subject, from_addr, from_name, rules_cfg):
     # No rule matched → catch-all?
     if catch_all_cfg:
         move_key = catch_all_cfg.get("move")
+        trash_flag = bool(catch_all_cfg.get("trash", False))
         delete_flag = bool(catch_all_cfg.get("delete", False))
         mark_read = bool(catch_all_cfg.get("mark_read", False))
 
-        if move_key is not None and delete_flag:
+        if move_key is not None and (trash_flag or delete_flag):
             log(
-                "[catch_all] Warning: catch_all has both move and delete=true; "
-                "ignoring delete"
+                "Warning: RULE='<catch_all>' has move with trash/delete; using move"
             )
+            trash_flag = False
+            delete_flag = False
+        elif trash_flag and delete_flag:
+            log("Warning: RULE='<catch_all>' has trash with delete; using trash")
             delete_flag = False
 
         return {
             "name": "<catch_all>",
             "move": move_key,
+            "trash": trash_flag,
             "delete": delete_flag,
             "mark_read": mark_read,
         }
 
     return None
+
+
+def resolve_trash_mailbox(imap, account_id, folder_map):
+    """
+    Resolve the reserved Trash role for an account (ADR 006):
+      1. the account's explicit "trash" folder mapping, if present
+      2. otherwise the mailbox the server advertises with \Trash
+    Returns (mailbox, None), or (None, reason) if neither is available.
+    """
+    configured = folder_map.get("trash")
+    if configured:
+        log(f"[{account_id}] Trash mailbox: '{configured}' (folders config)")
+        return configured, None
+    mailbox, problem = find_advertised_trash(imap)
+    if mailbox:
+        log(f"[{account_id}] Trash mailbox: '{mailbox}' (server \\Trash)")
+    else:
+        log(f"[{account_id}] ERROR: cannot resolve Trash mailbox: {problem}")
+    return mailbox, problem
+
+
+def log_message(account_id, result, msg_ref, subject, rule_name=None, outcome=None):
+    """
+    Write the single per-message line (format: docs/operations.md):
+      [account] MATCHED #uid RULE='name' SUBJECT='subject' <outcome> [DRY_RUN]
+      [account] NO_RULE #uid SUBJECT='subject' [DRY_RUN]
+    """
+    line = f"[{account_id}] {result} {msg_ref}"
+    if rule_name is not None:
+        line += f" RULE='{rule_name}'"
+    line += f" SUBJECT='{subject}'"
+    if outcome:
+        line += f" {outcome}"
+    if DRY_RUN:
+        line += " [DRY_RUN]"
+    log(line)
+
+
+def apply_mark_read(imap, uid):
+    """
+    Set \\Seen before a copy/delete, so a generic copy carries it.
+    Returns (extras, read_note): the suffix for a successful outcome, and the
+    note for a FAILED outcome saying the message was left marked read.
+    """
+    status, _ = imap.uid("STORE", uid, "+FLAGS", "(\\Seen)")
+    if status != "OK":
+        return f" (mark_read FAILED: status={status})", ""
+    return " (mark_read)", " (marked read)"
+
+
+def move_message(imap, uid, mailbox, destination, is_gmail, mark_read):
+    """
+    Move (or trash) one message out of INBOX, identified by UID.
+    Returns (outcome, expunge_needed).
+    """
+    if DRY_RUN:
+        return f"→ {destination}" + (" (mark_read)" if mark_read else ""), False
+
+    extras, read_note = apply_mark_read(imap, uid) if mark_read else ("", "")
+
+    status, _ = imap.uid("COPY", uid, f'"{mailbox}"')
+    if status != "OK":
+        return (
+            f"FAILED: copy to '{mailbox}' refused (status={status}); "
+            f"left in INBOX{read_note}"
+        ), False
+
+    if is_gmail:
+        # Gmail folders are labels: COPY added the destination label;
+        # removing \\Inbox takes the message out of INBOX while keeping
+        # its other labels. No \\Deleted, no EXPUNGE. On failure the
+        # message stays in INBOX; never fall back to \\Deleted.
+        status, _ = imap.uid("STORE", uid, "-X-GM-LABELS", r"(\Inbox)")
+        if status != "OK":
+            return (
+                f"FAILED: \\Inbox label not removed (status={status}); "
+                f"copied to '{mailbox}', still in INBOX{read_note}"
+            ), False
+        return f"→ {destination}{extras}", False
+
+    # Generic IMAP move: mark source for removal and expunge once
+    # after processing all messages.
+    status, _ = imap.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
+    if status != "OK":
+        return (
+            f"FAILED: \\Deleted not set (status={status}); "
+            f"copied to '{mailbox}', still in INBOX{read_note}"
+        ), False
+    return f"→ {destination}{extras}", True
+
+
+def delete_message(imap, uid, mark_read):
+    """Mark one message \\Deleted for the end-of-run EXPUNGE. Returns (outcome, expunge_needed)."""
+    if DRY_RUN:
+        return "DELETED" + (" (mark_read)" if mark_read else ""), False
+
+    extras, read_note = apply_mark_read(imap, uid) if mark_read else ("", "")
+
+    status, _ = imap.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
+    if status != "OK":
+        return f"FAILED: \\Deleted not set (status={status}); left in INBOX{read_note}", False
+    return f"DELETED{extras}", True
+
+
+def mark_message_read(imap, uid):
+    """mark_read on its own: set \\Seen and leave the message in INBOX. Returns the outcome."""
+    if DRY_RUN:
+        return "MARKED_READ"
+    status, _ = imap.uid("STORE", uid, "+FLAGS", "(\\Seen)")
+    if status != "OK":
+        return f"FAILED: \\Seen not set (status={status}); left in INBOX"
+    return "MARKED_READ"
 
 
 # ---------- Core processing ----------
@@ -301,8 +498,27 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
     imap = imaplib.IMAP4_SSL(host)
     imap.login(user, password)
 
+    # Gmail moves messages by label, so move/trash need to know the provider.
+    # None (query failed) blocks move/trash rather than risking generic
+    # \Deleted + EXPUNGE semantics on Gmail.
+    is_gmail = detect_gmail(imap)
+    if is_gmail is None:
+        log(
+            f"[{account_id}] ERROR: capability query failed; "
+            "move and trash actions will be skipped"
+        )
+    elif is_gmail:
+        log(f"[{account_id}] Gmail IMAP extensions detected (X-GM-EXT-1)")
+
     # Check folder existence
     ensure_folders_exist(imap, account_id, folders_for_account)
+    expunge_needed = False
+
+    # Trash is a reserved role, resolved once, only when a trash rule fires:
+    # the account's "trash" mapping if present, else the server's \Trash.
+    trash_mailbox = None
+    trash_problem = None
+    trash_resolved = False
 
     status, _ = imap.select("INBOX")
     if status != "OK":
@@ -322,10 +538,13 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
     log(f"[{account_id}] Found {len(ids)} unseen messages")
 
     for uid in ids:
+        # Log UIDs as #42 (uid itself stays bytes for IMAP commands)
+        msg_ref = "#" + uid.decode("ascii", errors="replace")
+
         # Use PEEK so we don't mark as Seen just by fetching
         status, data = imap.uid("FETCH", uid, "(BODY.PEEK[])")
         if status != "OK":
-            log(f"[{account_id}] ERROR: fetch {uid} failed (status={status})")
+            log(f"[{account_id}] ERROR: fetch {msg_ref} failed (status={status})")
             continue
 
         msg = email.message_from_bytes(data[0][1])
@@ -360,70 +579,52 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
         # rule = choose_rule(addresses, subject, from_addr, rules_cfg)
         rule = choose_rule(addresses, subject, from_addr, from_name, rules_cfg)
         if not rule:
-            log(f"[{account_id}] No rule for message {uid} (subject='{subject}')")
+            log_message(account_id, "NO_RULE", msg_ref, subject)
             continue
 
         rule_name = rule.get("name", "<unnamed>")
         move_key = rule.get("move")
+        trash_flag = rule.get("trash", False)
         delete_flag = rule.get("delete", False)
         mark_read = rule.get("mark_read", False)
 
-        # --- MOVE action (if present) ---
-        if move_key is not None:
-            target_mailbox = folders_for_account.get(move_key)
+        if move_key is not None or trash_flag:
+            # --- MOVE or TRASH action ---
+            if move_key is not None:
+                target_mailbox = folders_for_account.get(move_key)
+                problem = f"no folder mapping for key '{move_key}'"
+            else:
+                if not trash_resolved:
+                    trash_mailbox, trash_problem = resolve_trash_mailbox(
+                        imap, account_id, folders_for_account
+                    )
+                    trash_resolved = True
+                target_mailbox = trash_mailbox
+                problem = f"no Trash mailbox: {trash_problem}"
+
             if not target_mailbox:
-                log(
-                    f"[{account_id}] [{rule_name}] No folder mapping for key "
-                    f"'{move_key}'"
+                outcome = f"SKIPPED: {problem}"
+            elif is_gmail is None:
+                outcome = "SKIPPED: provider unknown (capability query failed)"
+            else:
+                destination = f"Trash ({target_mailbox})" if trash_flag else target_mailbox
+                outcome, expunge = move_message(
+                    imap, uid, target_mailbox, destination, is_gmail, mark_read
                 )
-                continue
+                expunge_needed = expunge_needed or expunge
+        elif delete_flag:
+            # --- DELETE action ---
+            outcome, expunge = delete_message(imap, uid, mark_read)
+            expunge_needed = expunge_needed or expunge
+        elif mark_read:
+            # --- MARK_READ on its own (message stays in INBOX) ---
+            outcome = mark_message_read(imap, uid)
+        else:
+            outcome = "NO_ACTION"
 
-            log(
-                f"[{account_id}] [{rule_name}] Message {uid}: '{subject}' "
-                f"→ {target_mailbox} (mark_read={mark_read})"
-            )
+        log_message(account_id, "MATCHED", msg_ref, subject, rule_name, outcome)
 
-            if DRY_RUN:
-                continue
-
-            if mark_read:
-                imap.uid("STORE", uid, "+FLAGS", "(\\Seen)")
-
-            status, _ = imap.uid("COPY", uid, f'"{target_mailbox}"')
-            if status != "OK":
-                log(
-                    f"[{account_id}] [{rule_name}] ERROR: copy to "
-                    f"'{target_mailbox}' failed (status={status})"
-                )
-                continue
-
-            # Mark original as deleted; expunge at end
-            imap.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
-            continue
-
-        # --- DELETE action (only if no move) ---
-        if delete_flag and move_key is None:
-            log(
-                f"[{account_id}] [{rule_name}] Message {uid}: '{subject}' "
-                f"→ DELETE (mark_read={mark_read})"
-            )
-
-            if DRY_RUN:
-                continue
-
-            if mark_read:
-                imap.uid("STORE", uid, "+FLAGS", "(\\Seen)")
-
-            imap.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
-            continue
-
-        # No move, no delete -> nothing to do
-        log(
-            f"[{account_id}] [{rule_name}] Message {uid}: '{subject}' "
-            f"→ no action (rule has neither move nor delete)"
-        )
-
-    if not DRY_RUN:
+    if not DRY_RUN and expunge_needed:
         imap.expunge()
 
     imap.logout()

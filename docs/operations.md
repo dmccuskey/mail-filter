@@ -95,8 +95,73 @@ Examples of operational conditions that are logged include:
 - rule matches
 - failed mailbox copies
 - missing folder mappings
-- move/delete actions
+- move/trash/delete actions
 - no matching rule
+
+## Log Format
+
+Every processed message produces exactly one line, written after its outcome is known, so a line never reports a destination the message did not reach.
+
+```text
+[timestamp] [account] MATCHED #uid RULE='rule name' SUBJECT='subject' <outcome><extras>
+[timestamp] [account] NO_RULE #uid SUBJECT='subject'
+```
+
+- `[...]` is used only for the timestamp and the account ID.
+- `MATCHED` means a rule, or `catch_all` (`RULE='<catch_all>'`), matched. `NO_RULE` means nothing matched and there is no catch-all.
+- `#uid` is the message's IMAP UID. A UID is unique only within one account's mailbox, so combine it with the account when searching across accounts.
+- `RULE` and `SUBJECT` are printed as-is; quotes inside them are not escaped.
+
+The outcome is one of:
+
+| Outcome | Meaning |
+|---|---|
+| `→ <mailbox>` | moved to that mailbox |
+| `→ Trash (<mailbox>)` | trashed to that mailbox |
+| `DELETED` | marked `\Deleted`; removed by the end-of-run `EXPUNGE` |
+| `MARKED_READ` | `mark_read` was the only action; the message stays in `INBOX` |
+| `NO_ACTION` | the rule has no actions; the message is unchanged |
+| `SKIPPED: <reason>` | nothing was attempted; the message is unchanged |
+| `FAILED: <reason>; <where the message was left>` | an IMAP step was refused |
+
+The arrow `→` appears only when the message went somewhere. A `FAILED` outcome always ends by saying where the message was left, for example `left in INBOX` or `copied to 'GitHub', still in INBOX`, plus ` (marked read)` if `mark_read` had already been applied.
+
+Extras follow the outcome:
+
+- ` (mark_read)`: the message was also marked read. ` (mark_read FAILED: status=NO)` means the main action succeeded but `\Seen` could not be set.
+- ` [DRY_RUN]`: `DRY_RUN` was on, so nothing on the server was changed. This is added to every per-message line in a dry run.
+
+Examples:
+
+```text
+[2026-09-23 12:21:50] [gmail-main] MATCHED #16186 RULE='lifecare to Trash' SUBJECT='Your Member Discounts Are Here' → Trash (mail-filter-tests/alt-trash)
+[2026-09-23 12:21:50] [gmail-main] MATCHED #16201 RULE='GitHub mail' SUBJECT='New issue' → GitHub (mark_read)
+[2026-09-23 12:21:50] [gmail-main] MATCHED #16190 RULE='boulder theraputics no matching folder, error' SUBJECT='Spring newsletter' FAILED: copy to 'mail-filter-tests/MISSING-FOLDER' refused (status=NO); left in INBOX
+[2026-09-23 12:21:50] [gmail-main] NO_RULE #16159 SUBJECT='🔉 David, big savings for 3 years! See Inside.'
+```
+
+Lines that are not about a single matched message keep an account-level form, for example:
+
+```text
+[2026-09-23 12:21:50] [gmail-main] ERROR: capability query failed; move and trash actions will be skipped
+[2026-09-23 12:21:50] [gmail-main] Trash mailbox: '[Gmail]/Trash' (server \Trash)
+[2026-09-23 12:21:50] [gmail-main] ERROR: fetch #16159 failed (status=NO)
+```
+
+Rule configuration warnings are written as `Warning: RULE='name' ...`.
+
+Useful searches:
+
+```bash
+grep MATCHED mail_filter.log              # every match
+grep NO_RULE mail_filter.log              # unmatched messages
+grep -E 'FAILED|ERROR' mail_filter.log    # anything that needs attention
+grep 'SKIPPED' mail_filter.log            # matches that could not be acted on
+grep "RULE='GitHub mail'" mail_filter.log # one rule
+grep '#16186 ' mail_filter.log            # one message
+```
+
+No other line contains the word `MATCHED`.
 
 ## Log Rotation
 
@@ -155,7 +220,7 @@ Before changing filtering behavior:
 
 Avoid combining unrelated IMAP behavior changes into a single checkpoint.
 
-This is especially important for IMAP behavior changes such as the planned Gmail move handling.
+This is especially important for IMAP behavior changes such as the Gmail move and Trash handling in ADR 006.
 
 ## Recovery
 
@@ -176,7 +241,7 @@ test
        ↓
 commit
        ↓
-Gmail move behavior
+Gmail move and Trash behavior
        ↓
 test
        ↓

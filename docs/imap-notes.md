@@ -13,8 +13,8 @@ LOGIN
 SELECT INBOX
 UID SEARCH UNSEEN
 UID FETCH
-process (UID STORE / UID COPY)
-EXPUNGE
+process (UID STORE / UID COPY; Gmail label updates where supported)
+EXPUNGE (only if a message was marked \Deleted)
 LOGOUT
 ```
 
@@ -36,7 +36,7 @@ The current implementation performs a move as:
 
 ```text
 UID COPY message → target mailbox
-UID STORE original +FLAGS (\Deleted)
+UID STORE original +FLAGS (\Deleted)  [generic IMAP]
 ```
 
 After all messages for the account have been processed:
@@ -47,11 +47,20 @@ EXPUNGE
 
 is called.
 
-This is the current known-good baseline.
+This is the known-good baseline for non-Gmail servers, and it is also how `trash` is performed there.
+
+For Gmail, the move is:
+
+```text
+UID COPY message → target mailbox   (adds the label)
+UID STORE original -X-GM-LABELS (\Inbox)
+```
+
+This avoids marking the message `\Deleted` and avoids `EXPUNGE`. Other Gmail labels remain attached.
 
 ## Gmail
 
-Gmail's IMAP model differs from traditional mailbox-oriented IMAP because Gmail represents mail organization primarily through labels.
+Gmail's IMAP model differs from traditional mailbox-oriented IMAP because Gmail represents mail organization primarily through labels. The filter detects Gmail by the `X-GM-EXT-1` capability.
 
 This means that:
 
@@ -62,9 +71,27 @@ COPY → target
 
 does not necessarily have exactly the same visible semantics as a traditional IMAP mailbox move.
 
-The project has therefore identified Gmail move behavior as an area requiring explicit testing and potentially provider-specific handling.
+Gmail interprets `\Deleted` and `EXPUNGE` through two account settings:
 
-The Gmail-specific change has not yet been incorporated into the current implementation.
+- Auto-Expunge: when on, `\Deleted` expunges the message from the selected folder immediately, during the processing loop.
+- The disposition of a message expunged from its last visible folder: archive (default), move to Trash, or delete forever.
+
+The `trash` action copies the message to the Trash mailbox (for example `[Gmail]/Trash`) and removes `\Inbox`. Gmail purges Trash after 30 days.
+
+The `delete` action keeps the generic `\Deleted` plus `EXPUNGE` semantics, so on Gmail it usually archives the message.
+
+If the `CAPABILITY` query fails, the provider is unknown and `move` and `trash` are skipped rather than processed with generic semantics.
+
+## Trash Mailbox Discovery
+
+Without a `trash` mapping, the Trash mailbox comes from the RFC 6154 `\Trash` attribute in a plain `LIST`. `imaplib`'s `list()` returns each line without the `* LIST` prefix, for example:
+
+```text
+(\HasNoChildren \Trash) "/" "[Gmail]/Trash"
+(\HasNoChildren \UnMarked \Trash) "." INBOX.Trash
+```
+
+A name sent as an IMAP literal arrives as a tuple of the line and the name, and an empty result arrives as `[None]`. The advertised name is reused exactly. Exactly one `\Trash` mailbox must be advertised; otherwise Trash is unresolved and `trash` is skipped.
 
 ## EXPUNGE and Sequence Numbers
 
@@ -99,7 +126,7 @@ UID COPY <uid> "<target mailbox>"
 
 The UID returned by the search is used for every subsequent operation on that message; it is never converted back to a sequence number.
 
-`EXPUNGE` remains the plain, mailbox-level command and still runs once after the processing loop. The migration changed message identity only, not processing behavior.
+`EXPUNGE` remains a plain, mailbox-level command and runs once after the processing loop, only when a message was marked `\Deleted`. Gmail `move` and `trash` do not require it.
 
 The UID migration is a prerequisite for any processing model that expunges messages during iteration. It has been verified by unit tests and on the deployed accounts, and is recorded in [ADR 005](decisions/005-uid-based-message-identification.md).
 
@@ -116,21 +143,13 @@ UID migration
         ↓
 verification
         ↓
-Gmail-specific move behavior
+Gmail move and Trash behavior (ADR 006)
         ↓
 verification
 ```
 
-Do not combine the UID migration and Gmail EXPUNGE behavior into one unverified change.
+Keep the UID migration and Gmail move/Trash verification as separate checkpoints.
 
-## Open Gmail Question
+## Gmail Move and Trash Decision
 
-The exact final architecture for Gmail move handling remains open.
-
-Possible approaches include:
-
-- keeping the move implementation generic where standard IMAP behavior is sufficient
-- adding provider-specific handling for Gmail
-- using UID-based operations throughout and then implementing Gmail-specific source removal
-
-The choice should be made after the UID migration is complete and tested.
+The Gmail move and Trash behavior is recorded in [ADR 006](decisions/006-gmail-move-and-trash-semantics.md). It remains Proposed until verified against the deployed Gmail account.
