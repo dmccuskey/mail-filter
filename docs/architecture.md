@@ -80,6 +80,8 @@ services_payments
 
 This keeps matching logic separate from the physical mailbox structure.
 
+Before any account is processed, every account's rules are checked. If any rule uses an unknown match field, the filter logs every one (account, rule number and name, field), processes no mail, and exits with status 1 before any connection is made. A misspelled field can therefore never silently drop a condition (see [Rule Reference](rule-reference.md#unknown-match-fields)).
+
 ## Account Processing
 
 Each configured account is processed independently.
@@ -114,7 +116,7 @@ For each unseen message:
 IMAP message
      │
      ├── recipients
-     │      └── To / Cc / Delivered-To / X-Original-To
+     │      └── To header only (not Cc / Delivered-To / X-Original-To)
      │
      ├── subject
      │      └── MIME decoded

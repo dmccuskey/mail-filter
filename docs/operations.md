@@ -16,6 +16,17 @@ On the Raspberry Pi deployment, this is:
 /home/pi/mail-filter
 ```
 
+### Startup Rule Check
+
+Before connecting to any account, the filter checks every account's rules for unknown match fields. If it finds any, it logs one `ERROR` line per unknown field and a summary line, processes no mail, and exits with status 1:
+
+```text
+[2026-09-23 16:09:44] [gmail-main] ERROR: rule #1 'delete 1800gotjunk to Archive' uses unknown match field 'from_contains'
+[2026-09-23 16:09:44] ERROR: 1 unknown match field(s) in rules.local.json5; no mail processed (supported fields: docs/rule-reference.md)
+```
+
+All unknown fields in all accounts are reported in one run, so they can be fixed together. After editing `rules.local.json5`, run the filter once by hand (ideally with `DRY_RUN = True`) to confirm the check passes. See [Unknown Match Fields](rule-reference.md#unknown-match-fields).
+
 ## Dry Run
 
 The script contains:
@@ -74,6 +85,8 @@ Example:
 
 This causes the filter to run every five minutes.
 
+If `rules.local.json5` has an unknown match field, every cron run logs the startup rule errors and exits with status 1 without processing mail, until the rules are fixed.
+
 ## Logging
 
 The application logs to standard output.
@@ -89,6 +102,7 @@ Log entries include timestamps and account/rule context.
 Examples of operational conditions that are logged include:
 
 - connection
+- unknown match fields found by the startup rule check
 - folder validation warnings
 - failed IMAP searches
 - failed message fetches
@@ -146,6 +160,13 @@ Lines that are not about a single matched message keep an account-level form, fo
 [2026-09-23 12:21:50] [gmail-main] ERROR: capability query failed; move and trash actions will be skipped
 [2026-09-23 12:21:50] [gmail-main] Trash mailbox: '[Gmail]/Trash' (server \Trash)
 [2026-09-23 12:21:50] [gmail-main] ERROR: fetch #16159 failed (status=NO)
+[2026-09-23 12:21:50] [gmail-main] ERROR: rule #1 'GitHub mail' uses unknown match field 'from_contains'
+```
+
+The startup rule check ends with one line that has no account, because it covers the whole configuration:
+
+```text
+[2026-09-23 12:21:50] ERROR: 1 unknown match field(s) in rules.local.json5; no mail processed (supported fields: docs/rule-reference.md)
 ```
 
 Rule configuration warnings are written as `Warning: RULE='name' ...`.

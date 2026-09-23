@@ -1,5 +1,17 @@
 # Mail Filter Rule Reference
 
+## Match Fields: Quick Reference
+
+| Field family | Checks | `_is` (exact) | `_contains` | `_starts_with` | `_ends_with` |
+|---|---|---|---|---|---|
+| `to_*` | full addresses in the `To` header | `to_is` | `to_contains` | `to_starts_with` | `to_ends_with` |
+| `to_local_*` | part before `@` of each `To` address | `to_local_is` | `to_local_contains` | `to_local_starts_with` | `to_local_ends_with` |
+| `from_email_*` | sender's email address | `from_email_is` | `from_email_contains` | `from_email_starts_with` | `from_email_ends_with` |
+| `from_name_*` | sender's decoded display name | `from_name_is` | `from_name_contains` | `from_name_starts_with` | `from_name_ends_with` |
+| `subject_*` | decoded subject | `subject_is` | `subject_contains` | `subject_starts_with` | `subject_ends_with` |
+
+These 20 names are the only supported match fields. Matching is case-insensitive. Any other name in `match` is an error that stops the run (see [Unknown match fields](#unknown-match-fields)).
+
 ## Rule Structure
 
 A rule has three conceptual parts:
@@ -18,7 +30,7 @@ A rule has three conceptual parts:
 }
 ```
 
-All match and action fields are optional.
+All match and action fields are optional. A rule with no match fields matches every message.
 
 ## Rule Ordering
 
@@ -34,24 +46,41 @@ Specific rules should therefore generally appear before broader prefix or catch-
 
 ## Match Semantics
 
-Different match fields are combined with AND semantics.
+### Operations
+
+Every match field name is a field family followed by an operation:
+
+| Operation | Meaning | `"shop"` matches | `"shop"` does not match |
+|---|---|---|---|
+| `_is` | exact match of the whole value | `shop` | `shop-amazon` |
+| `_contains` | substring anywhere in the value | `my-shop-amazon` | `sho-p` |
+| `_starts_with` | prefix | `shop-amazon` | `my-shop` |
+| `_ends_with` | suffix | `my-shop` | `shop-amazon` |
+
+Comparison is case-insensitive: `"Receipt"`, `"receipt"`, and `"RECEIPT"` behave the same, and so do upper- and lower-case message text.
+
+### Different fields: AND
+
+Different match fields in one rule are combined with AND semantics.
 
 For example:
 
 ```json5
 "match": {
-  "to": ["shop-amazon"],
-  "subject_contains": ["receipt"]
+  "to_local_is": "shop-amazon",
+  "subject_contains": "receipt"
 }
 ```
 
 means:
 
 ```text
-recipient matches shop-amazon
+a To address has local part "shop-amazon"
 AND
 subject contains "receipt"
 ```
+
+### Multiple values: OR
 
 Multiple values within a field use OR semantics.
 
@@ -67,26 +96,44 @@ For example:
 
 matches if the subject contains any one of those values.
 
-String matching is case-insensitive.
+AND/OR combination is fixed as described here; it is not configurable.
 
 ### Single values
 
 Every match field accepts either a list or a single string. A single string is treated as a one-item list, so these are equivalent:
 
 ```json5
-"from_contains": "amazon.com"
-"from_contains": ["amazon.com"]
+"from_email_contains": "amazon.com"
+"from_email_contains": ["amazon.com"]
 ```
-
-This applies to `to`, `to_prefix`, `from_contains`, `from_name_contains`, `subject_contains`, and `subject_equals`.
 
 A single string is always one value. It is never split into characters or words. To match any of several values, use a list.
 
-## Implemented Match Fields
+An empty list adds no condition.
 
-### `to`
+## Recipient Fields
 
-Matches the local part of a recipient address exactly.
+### Which headers are used
+
+`to_*` and `to_local_*` read addresses from the message's **`To` header only**.
+
+`Cc`, `Delivered-To`, and `X-Original-To` are not used. A message sent to you only as a Cc, or whose address appears only in delivery headers (for example after forwarding), does not match a `to_*` or `to_local_*` rule on that address.
+
+### Multiple addresses
+
+If the `To` header lists several addresses, the field matches when **any one** address matches **any one** value.
+
+For:
+
+```text
+To: Alice <alice@example.com>, shop-amazon@aerospace.biz
+```
+
+both `"to_local_is": "shop-amazon"` and `"to_is": "alice@example.com"` match.
+
+### Full address vs. local part
+
+`to_*` compares the full address, including the domain. `to_local_*` compares only the part before `@`.
 
 For:
 
@@ -94,91 +141,88 @@ For:
 shop-amazon@aerospace.biz
 ```
 
-the local part is:
+| Field | Compares against |
+|---|---|
+| `to_*` | `shop-amazon@aerospace.biz` |
+| `to_local_*` | `shop-amazon` |
+
+Examples:
+
+```json5
+"to_is": "payments@aerospace.biz"     // this exact address
+"to_ends_with": "@aerospace.biz"      // any address at this domain
+"to_local_is": "shop-amazon"          // shop-amazon at any domain
+"to_local_starts_with": "shop-"       // shop-amazon, shop-shell, shop-newegg, ...
+```
+
+`"to_is": "shop-amazon"` does not match `shop-amazon@aerospace.biz`, because `to_is` needs the whole address. Use `to_local_is` for the local part.
+
+The display name in the `To` header (`Alice` above) is not matched by either family.
+
+## Sender Fields
+
+### `from_email_*`
+
+Compares the sender's email address from the `From` header, such as `noreply@github.com`.
+
+```json5
+"from_email_is": "noreply@github.com"
+"from_email_ends_with": "@github.com"
+"from_email_contains": "amazon.com"
+```
+
+### `from_name_*`
+
+Compares the sender's display name, the text before the address in the `From` header, MIME-decoded before matching.
+
+For:
 
 ```text
-shop-amazon
+From: GitHub <noreply@github.com>
 ```
 
-Example:
+the display name is `GitHub` and the email address is `noreply@github.com`. `"from_name_contains": "github.com"` does not match, because the name does not contain the address.
 
 ```json5
-"to": ["shop-amazon"]
+"from_name_is": "GitHub"
+"from_name_contains": "Fastmail"
 ```
 
-Recipient information is collected from:
+A message with no display name has an empty name, so it matches no `from_name_*` value.
 
-- `To`
-- `Cc`
-- `Delivered-To`
-- `X-Original-To`
+## Subject Fields
 
-### `to_prefix`
-
-Matches the beginning of a recipient's local part.
-
-Example:
+`subject_*` compares the subject after MIME decoding.
 
 ```json5
-"to_prefix": ["shop-"]
+"subject_is": "Your receipt from Fastmail"
+"subject_starts_with": "Re:"
+"subject_contains": ["receipt", "order confirmation"]
 ```
 
-matches:
+`subject_is` must match the whole subject, so `"subject_is": "Hello"` does not match `Hello there`.
+
+## Unknown Match Fields
+
+Before connecting to any account, the filter checks every rule in `rules.local.json5`. If any rule uses a match field not in the quick reference above, the filter logs one error line per unknown field, naming the account, the rule, and the field, then exits with status 1. For example:
 
 ```text
-shop-amazon
-shop-shell
-shop-newegg
+[2026-09-23 09:15:02] [gmail-main] ERROR: rule #1 'GitHub mail' uses unknown match field 'from_contains'
+[2026-09-23 09:15:02] ERROR: 1 unknown match field(s) in rules.local.json5; no mail processed (supported fields: docs/rule-reference.md)
 ```
 
-### `from_contains`
+Every unknown field in every account is reported in the same run. No mail is processed in that run. An unknown field is never skipped, because skipping it would drop a condition and let the rule match mail it should not.
 
-Case-insensitive substring match against the sender's email address.
+There are no aliases. Earlier versions used different names, which are now errors:
 
-Example:
+| Earlier name | Replacement |
+|---|---|
+| `to` | `to_local_is` |
+| `to_prefix` | `to_local_starts_with` |
+| `from_contains` | `from_email_contains` |
+| `subject_equals` | `subject_is` |
 
-```json5
-"from_contains": ["amazon.com"]
-```
-
-### `from_name_contains`
-
-Case-insensitive substring match against the sender's display name.
-
-Example:
-
-```json5
-"from_name_contains": ["Fastmail"]
-```
-
-The display name is MIME-decoded before matching.
-
-### `subject_contains`
-
-Case-insensitive substring match against the decoded subject.
-
-Example:
-
-```json5
-"subject_contains": [
-  "receipt",
-  "order confirmation"
-]
-```
-
-### `subject_equals`
-
-Exact case-insensitive subject comparison.
-
-Example:
-
-```json5
-"subject_equals": [
-  "Your receipt from Fastmail"
-]
-```
-
-A single string value is also accepted (see [Single values](#single-values)).
+The earlier `to` and `to_prefix` also read `Cc`, `Delivered-To`, and `X-Original-To`; their replacements read `To` only.
 
 ## Implemented Actions
 
@@ -307,7 +351,6 @@ This is a property of the processing loop and should not be confused with an `un
 
 The following appear in historical configuration/documentation but are not currently implemented by the rule engine:
 
-- `from` exact-address matcher
 - `not_subject_contains`
 - `unread_only` matcher
 - `age_minutes_gt`
@@ -317,6 +360,13 @@ The following appear in historical configuration/documentation but are not curre
 These should not be treated as current capabilities.
 
 Some may become future rule features.
+
+Possible future match features, also not implemented:
+
+- `cc_*` matchers for the `Cc` header
+- configurable AND/OR combination of match values
+
+(Exact sender-address matching, once listed here as `from`, is now `from_email_is`.)
 
 ## Rule Design Principle
 

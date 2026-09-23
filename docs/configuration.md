@@ -134,7 +134,7 @@ Example:
       {
         "name": "Boulder Parks Auto Renewal",
         "match": {
-          "to": ["my-boulderparknrecs"],
+          "to_local_is": ["my-boulderparknrecs"],
           "subject_contains": ["membership auto renewal"]
         },
         "do": {
@@ -145,6 +145,8 @@ Example:
   }
 }
 ```
+
+The supported match fields are listed in the [Rule Reference](rule-reference.md). Before connecting to any account, the filter checks every account's rules; if any rule uses an unknown match field, it logs an error for each one (naming the account, rule, and field), processes no mail, and exits with status 1.
 
 An optional `catch_all` may follow the rules:
 

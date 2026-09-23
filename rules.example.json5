@@ -3,9 +3,11 @@
   // The first matching rule wins.
   //
   // Different match fields are ANDed.
-  // Array values for supported "contains" matchers are ORed.
+  // Array values within a match field are ORed.
   // A single string is treated as a one-item array.
   // Matching is case-insensitive.
+  // to_* / to_local_* read the To header only.
+  // Unknown match fields stop the run; see docs/rule-reference.md.
 
   "aerospace-account": {
     "rules": [
@@ -22,7 +24,7 @@
       {
         "name": "Services payments",
         "match": {
-          "to": ["payments@aerospace.biz"],
+          "to_is": ["payments@aerospace.biz"],
         },
         "do": {
           "move": "services_payments",
@@ -37,7 +39,7 @@
       {
         "name": "GitHub mail",
         "match": {
-          "from_contains": ["github.com"],
+          "from_email_contains": ["github.com"],
         },
         "do": {
           "move": "github_main",

@@ -25,12 +25,8 @@ It currently:
 - uses logical folder mappings
 - processes unseen messages
 - evaluates ordered rules
-- supports `to`
-- supports `to_prefix`
-- supports `from_contains`
-- supports `from_name_contains`
-- supports `subject_contains`
-- supports `subject_equals`
+- supports the `to_*`, `to_local_*`, `from_email_*`, `from_name_*`, and `subject_*` match fields, each with `_is`, `_contains`, `_starts_with`, and `_ends_with` (recipient fields read the `To` header only)
+- rejects unknown match fields before connecting to any account
 - supports `move`
 - supports `trash` (to the optional `trash` mapping, otherwise the server-advertised `\Trash` mailbox)
 - supports `delete`
@@ -46,7 +42,6 @@ This baseline should remain easy to restore.
 
 The configuration/history contains several rule features that are not currently implemented:
 
-- `from` exact-address matching
 - `not_subject_contains`
 - `unread_only`
 - `age_minutes_gt`

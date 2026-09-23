@@ -10,9 +10,11 @@ Mail Filter connects to one or more IMAP accounts, evaluates unseen messages aga
 - JSON5 configuration
 - Ordered, first-match rule evaluation
 - Logical folder mappings
-- Recipient prefix routing
-- Sender and sender-name matching
+- Recipient matching on the `To` header (full address or local part)
+- Sender email-address and display-name matching
 - MIME-decoded subject matching
+- Exact, substring, prefix, and suffix matching for every field
+- Unknown match fields rejected at startup
 - Move, delete, and mark-read actions
 - Optional catch-all routing
 - Dry-run support

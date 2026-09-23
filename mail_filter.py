@@ -2,6 +2,7 @@
 import imaplib
 import email
 import re
+import sys
 # import json
 from email.utils import getaddresses
 from email.header import decode_header
@@ -29,14 +30,9 @@ def load_json(path):
         return json_parser.load(f)
 
 
-def get_recipients(msg):
-    """Collect all recipient addresses from common headers, lowercased."""
-    fields = []
-    for header in ["To", "Cc", "Delivered-To", "X-Original-To"]:
-        v = msg.get(header)
-        if v:
-            fields.append(v)
-    return [addr.lower() for _, addr in getaddresses(fields)]
+def get_to_addresses(msg):
+    """Collect the addresses in the To header only, lowercased."""
+    return [addr.lower() for _, addr in getaddresses(msg.get_all("To", [])) if addr]
 
 
 def ensure_folders_exist(imap, account_id, folder_map):
@@ -142,30 +138,6 @@ def as_list(value):
     return list(value)
 
 
-def contains_all(haystack: str, tokens):
-    """Return True if all tokens (case-insensitive) are contained in haystack."""
-    if not tokens:
-        return True
-    h = haystack.lower()
-    for t in tokens:
-        if t.lower() not in h:
-            return False
-    return True
-
-
-def contains_any(haystack: str, tokens):
-    """Return True if at least one token (case-insensitive) is contained in haystack."""
-    if DEV_LOGS: log(f"{tokens}")
-    if not tokens:
-        return True
-    h = haystack.lower()
-    for t in tokens:
-        if DEV_LOGS: log(f"{h} {t}")
-        if t.lower() in h:
-            return True
-    return False
-
-
 def decode_mime_header(value: str) -> str:
     """
     Decode MIME-encoded headers like '=?utf-8?b?...?=' into a readable string.
@@ -187,38 +159,68 @@ def decode_mime_header(value: str) -> str:
     return "".join(parts)
 
 
-def local_part_matches(addresses, match_cfg):
-    """
-    Match based on local-part:
-      - 'to': exact local names
-      - 'to_prefix': list of prefixes for local names
-    If neither is present → no address constraint.
-    """
-    to_list = [x.lower() for x in as_list(match_cfg.get("to")) if x]
-    prefixes = [x.lower() for x in as_list(match_cfg.get("to_prefix")) if x]
+class RuleConfigError(ValueError):
+    """A rule in the rules config is invalid, e.g. an unknown match field."""
 
-    # If no local-part constraints, automatically ok
-    if not to_list and not prefixes:
+
+# Match fields: each returns the candidate strings for one message.
+# to/to_local use the To header only (see docs/rule-reference.md).
+MATCH_FIELDS = {
+    "to": lambda m: m["to_addresses"],
+    "to_local": lambda m: [addr.partition("@")[0] for addr in m["to_addresses"]],
+    "from_email": lambda m: [m["from_addr"]],
+    "from_name": lambda m: [m["from_name"]],
+    "subject": lambda m: [m["subject"]],
+}
+
+MATCH_OPS = {
+    "is": lambda text, value: text == value,
+    "contains": lambda text, value: value in text,
+    "starts_with": lambda text, value: text.startswith(value),
+    "ends_with": lambda text, value: text.endswith(value),
+}
+
+# The supported match field names, e.g. "to_local_starts_with"
+MATCHERS = {
+    f"{field}_{op}": (field, op) for field in MATCH_FIELDS for op in MATCH_OPS
+}
+
+
+def unknown_match_field_message(index, rule_name, field):
+    return f"rule #{index} '{rule_name}' uses unknown match field '{field}'"
+
+
+def validate_rules(rules_cfg):
+    """Return a message for every unknown match field in the rules (empty if none)."""
+    problems = []
+    for index, rule in enumerate(rules_cfg.get("rules", []), start=1):
+        match_cfg = rule.get("match", {}) or {}
+        for field in match_cfg:
+            if field not in MATCHERS:
+                problems.append(unknown_match_field_message(
+                    index, rule.get("name", "<unnamed>"), field
+                ))
+    return problems
+
+
+def match_field_matches(field, values, message):
+    """
+    True if any candidate string for the field matches any value
+    (case-insensitive). An empty value list is no constraint.
+    """
+    values = [v.lower() for v in as_list(values) if v]
+    if not values:
         return True
-
-    if DEV_LOGS: log(f"{to_list}")
-
-    for addr in addresses:
-        local, _, _ = addr.partition("@")
-        local = local.lower()
-
-        if to_list and local in to_list:
+    field_name, op_name = MATCHERS[field]
+    op = MATCH_OPS[op_name]
+    for text in MATCH_FIELDS[field_name](message):
+        text = (text or "").lower()
+        if any(op(text, value) for value in values):
             return True
-
-        if prefixes:
-            for p in prefixes:
-                if local.startswith(p):
-                    return True
-
     return False
 
 
-def choose_rule(addresses, subject, from_addr, from_name, rules_cfg):
+def choose_rule(to_addresses, subject, from_addr, from_name, rules_cfg):
     """
     Unified rule engine with per-account config and match/do structure.
 
@@ -238,43 +240,35 @@ def choose_rule(addresses, subject, from_addr, from_name, rules_cfg):
       }
     or None if nothing matched and no catch_all.
     """
-    subject_lower = (subject or "").lower()
-    from_lower = (from_addr or "").lower()
-    from_name_lower = (from_name or "").lower()
+    message = {
+        "to_addresses": list(to_addresses or []),
+        "from_addr": from_addr or "",
+        "from_name": from_name or "",
+        "subject": subject or "",
+    }
 
     rules = rules_cfg.get("rules", [])
     catch_all_cfg = rules_cfg.get("catch_all")
 
-    for rule in rules:
+    for index, rule in enumerate(rules, start=1):
         rule_name = rule.get("name", "<unnamed>")
         match_cfg = rule.get("match", {}) or {}
         do_cfg = rule.get("do", {}) or {}
 
-        # 1) Address matching (local-part based)
-        if not local_part_matches(addresses, match_cfg):
+        # Never ignore an unknown field: that would drop a condition.
+        for field in match_cfg:
+            if field not in MATCHERS:
+                raise RuleConfigError(
+                    unknown_match_field_message(index, rule_name, field)
+                )
+
+        # Different fields are ANDed; values within a field are ORed.
+        if not all(
+            match_field_matches(field, values, message)
+            for field, values in match_cfg.items()
+        ):
             continue
 
-        # 2) From address constraints
-        from_tokens = as_list(match_cfg.get("from_contains"))
-        if from_tokens and not contains_any(from_lower, from_tokens):
-            continue
-
-        # 3) From name constraints
-        from_name_tokens = as_list(match_cfg.get("from_name_contains"))
-        if from_name_tokens and not contains_any(from_name_lower, from_name_tokens):
-            continue
-
-        # 4) Subject constraints
-        subj_tokens = as_list(match_cfg.get("subject_contains"))
-        if subj_tokens and not contains_any(subject_lower, subj_tokens):
-            continue
-
-        # 4b) Subject equals constraints
-        subj_equals = as_list(match_cfg.get("subject_equals"))
-        if subj_equals:
-            if not any(subject_lower == target.lower() for target in subj_equals):
-                continue
-            
         # If we reach here, rule matches
         move_key = do_cfg.get("move")
         trash_flag = bool(do_cfg.get("trash", False))
@@ -298,53 +292,6 @@ def choose_rule(addresses, subject, from_addr, from_name, rules_cfg):
             "delete": delete_flag,
             "mark_read": mark_read,
         }
-    # subject_lower = (subject or "").lower()
-    # from_lower = (from_addr or "").lower()
-
-    # rules = rules_cfg.get("rules", [])
-    # catch_all_cfg = rules_cfg.get("catch_all")
-
-    # for rule in rules:
-    #     rule_name = rule.get("name", "<unnamed>")
-    #     match_cfg = rule.get("match", {}) or {}
-    #     do_cfg = rule.get("do", {}) or {}
-
-    #     if DEV_LOGS: log(f"addresses")
-    #     # 1) Address matching (local-part based)
-    #     if not local_part_matches(addresses, match_cfg):
-    #         continue
-
-    #     if DEV_LOGS: log(f"from constrains")
-    #     # 2) From constraints
-    #     from_tokens = match_cfg.get("from_contains", [])
-    #     if not contains_any(from_lower, from_tokens):
-    #         continue
-
-    #     if DEV_LOGS: log(f"subject constrains")
-    #     # 3) Subject constraints
-    #     subj_tokens = match_cfg.get("subject_contains", [])
-    #     if not contains_any(subject_lower, subj_tokens):
-    #         continue
-
-    #     # If we reach here, rule matches
-    #     move_key = do_cfg.get("move")
-    #     delete_flag = bool(do_cfg.get("delete", False))
-    #     mark_read = bool(do_cfg.get("mark_read", False))
-
-    #     # If move is present, ignore delete (move wins)
-    #     if move_key is not None and delete_flag:
-    #         log(
-    #             f"[{rule_name}] Warning: rule has both move and delete=true; "
-    #             "ignoring delete"
-    #         )
-    #         delete_flag = False
-
-    #     return {
-    #         "name": rule_name,
-    #         "move": move_key,
-    #         "delete": delete_flag,
-    #         "mark_read": mark_read,
-    #     }
 
     # No rule matched → catch-all?
     if catch_all_cfg:
@@ -549,8 +496,8 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
 
         msg = email.message_from_bytes(data[0][1])
 
-        # Recipients (To/Cc/etc.)
-        addresses = get_recipients(msg)
+        # Recipients (To header only)
+        to_addresses = get_to_addresses(msg)
 
         # Subject
         # subject = msg.get("Subject", "") or ""
@@ -576,8 +523,7 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
             from_addr = ""
 
         # Decide rule
-        # rule = choose_rule(addresses, subject, from_addr, rules_cfg)
-        rule = choose_rule(addresses, subject, from_addr, from_name, rules_cfg)
+        rule = choose_rule(to_addresses, subject, from_addr, from_name, rules_cfg)
         if not rule:
             log_message(account_id, "NO_RULE", msg_ref, subject)
             continue
@@ -637,6 +583,20 @@ def main():
     accounts_cfg = load_json(base / "accounts.local.json5")
     folders_cfg_all = load_json(base / "folders.local.json5")["folders"]
     rules_all = load_json(base / "rules.local.json5")
+
+    # Reject unknown match fields before connecting to any account
+    problem_count = 0
+    for account in accounts_cfg["accounts"]:
+        account_rules = rules_all.get(account["id"])
+        for problem in validate_rules(account_rules or {}):
+            log(f"[{account['id']}] ERROR: {problem}")
+            problem_count += 1
+    if problem_count:
+        log(
+            f"ERROR: {problem_count} unknown match field(s) in rules.local.json5; "
+            "no mail processed (supported fields: docs/rule-reference.md)"
+        )
+        sys.exit(1)
 
     for account in accounts_cfg["accounts"]:
         account_id = account["id"]

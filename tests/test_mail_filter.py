@@ -10,10 +10,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import mail_filter  # noqa: E402
 
 
-def raw_message(to="", subject="", from_="sender@example.com"):
+def raw_message(to="", subject="", from_="sender@example.com", headers=()):
+    extra = "".join(f"{name}: {value}\r\n" for name, value in headers)
     return (
         f"From: {from_}\r\n"
         f"To: {to}\r\n"
+        f"{extra}"
         f"Subject: {subject}\r\n"
         "\r\n"
         "body\r\n"
@@ -159,7 +161,7 @@ class ProcessAccountUidTests(unittest.TestCase):
     def test_move_with_mark_read(self):
         fake = FakeIMAP({b"101": raw_message(to="shop-amazon@example.com")})
         run_account(fake, {"rules": [
-            rule({"to_prefix": ["shop-"]}, {"move": "shop", "mark_read": True}),
+            rule({"to_local_starts_with": ["shop-"]}, {"move": "shop", "mark_read": True}),
         ]})
 
         self.assertEqual(fake.message_calls(), [
@@ -174,7 +176,7 @@ class ProcessAccountUidTests(unittest.TestCase):
         fake = FakeIMAP({b"7": raw_message(to="shop-a@example.com"),
                          b"9": raw_message(to="shop-b@example.com")})
         run_account(fake, {"rules": [
-            rule({"to_prefix": ["shop-"]}, {"move": "shop"}),
+            rule({"to_local_starts_with": ["shop-"]}, {"move": "shop"}),
         ]})
 
         self.assertEqual(fake.message_calls(), [
@@ -190,7 +192,7 @@ class ProcessAccountUidTests(unittest.TestCase):
     def test_failed_copy_does_not_delete_source(self):
         fake = FakeIMAP({b"101": raw_message(to="shop-a@example.com")}, copy_status="NO")
         run_account(fake, {"rules": [
-            rule({"to_prefix": ["shop-"]}, {"move": "shop"}),
+            rule({"to_local_starts_with": ["shop-"]}, {"move": "shop"}),
         ]})
 
         self.assertEqual(fake.message_calls(), [("UID", "COPY", b"101", '"Shopping"')])
@@ -219,7 +221,7 @@ class ProcessAccountUidTests(unittest.TestCase):
     def test_catch_all(self):
         fake = FakeIMAP({b"300": raw_message(to="random@example.com")})
         run_account(fake, {
-            "rules": [rule({"to_prefix": ["shop-"]}, {"move": "shop"})],
+            "rules": [rule({"to_local_starts_with": ["shop-"]}, {"move": "shop"})],
             "catch_all": {"move": "catch_all"},
         })
 
@@ -230,13 +232,13 @@ class ProcessAccountUidTests(unittest.TestCase):
 
     def test_no_rule_and_no_catch_all(self):
         fake = FakeIMAP({b"300": raw_message(to="random@example.com")})
-        run_account(fake, {"rules": [rule({"to_prefix": ["shop-"]}, {"move": "shop"})]})
+        run_account(fake, {"rules": [rule({"to_local_starts_with": ["shop-"]}, {"move": "shop"})]})
 
         self.assertEqual(fake.message_calls(), [])
 
     def test_rule_without_action(self):
         fake = FakeIMAP({b"300": raw_message(to="shop-a@example.com")})
-        run_account(fake, {"rules": [rule({"to_prefix": ["shop-"]}, {})]})
+        run_account(fake, {"rules": [rule({"to_local_starts_with": ["shop-"]}, {})]})
 
         self.assertEqual(fake.message_calls(), [])
 
@@ -305,7 +307,7 @@ class GenericSafetyTests(unittest.TestCase):
 
     def test_no_expunge_when_nothing_was_marked_deleted(self):
         fake = FakeIMAP({b"42": raw_message(to="random@example.com")})
-        run_account(fake, {"rules": [rule({"to": ["me"]}, {"move": "shop"})]})
+        run_account(fake, {"rules": [rule({"to_local_is": ["me"]}, {"move": "shop"})]})
 
         self.assertNotIn(("EXPUNGE",), fake.calls)
 
@@ -338,7 +340,7 @@ class GmailTests(unittest.TestCase):
 
     def test_move_adds_label_and_removes_inbox_without_expunge(self):
         fake = FakeIMAP({b"42": raw_message(from_="noreply@github.com")}, gmail=True)
-        run_account(fake, {"rules": [rule({"from_contains": "github.com"}, {"move": "github"})]},
+        run_account(fake, {"rules": [rule({"from_email_contains": "github.com"}, {"move": "github"})]},
                     folders=GMAIL_FOLDERS)
 
         self.assertEqual(fake.message_calls(), [
@@ -407,7 +409,7 @@ class GmailTests(unittest.TestCase):
         fake = FakeIMAP({b"7": raw_message(from_="noreply@github.com"),
                          b"9": raw_message(subject="Spam offer")}, gmail=True)
         run_account(fake, {"rules": [
-            rule({"from_contains": "github.com"}, {"move": "github"}),
+            rule({"from_email_contains": "github.com"}, {"move": "github"}),
             rule({"subject_contains": "spam"}, {"delete": True}),
         ]}, folders=GMAIL_FOLDERS)
 
@@ -668,7 +670,7 @@ class LogFormatTests(unittest.TestCase):
 
     def test_no_rule_line(self):
         fake = FakeIMAP({b"42": raw_message(to="random@example.com", subject="Hi")})
-        output = run_account(fake, {"rules": [rule({"to": ["me"]}, {"move": "shop"})]})
+        output = run_account(fake, {"rules": [rule({"to_local_is": ["me"]}, {"move": "shop"})]})
         self.assertEqual(message_lines(output), ["[test] NO_RULE #42 SUBJECT='Hi'"])
         self.assertNotIn("MATCHED", output)
 
@@ -729,7 +731,7 @@ class MarkReadOnlyTests(unittest.TestCase):
 
     def test_catch_all_mark_read_only(self):
         fake = FakeIMAP({b"42": raw_message(to="random@example.com")})
-        run_account(fake, {"rules": [rule({"to": ["me"]}, {"move": "shop"})],
+        run_account(fake, {"rules": [rule({"to_local_is": ["me"]}, {"move": "shop"})],
                            "catch_all": {"mark_read": True}})
 
         self.assertEqual(fake.message_calls(), [("UID", "STORE", b"42") + SEEN])
@@ -770,42 +772,38 @@ class ChooseRuleTests(unittest.TestCase):
 
     def test_first_match_wins(self):
         cfg = {"rules": [
-            rule({"to": ["shop-amazon"]}, {"move": "amazon"}, name="specific"),
-            rule({"to_prefix": ["shop-"]}, {"move": "shop"}, name="broad"),
+            rule({"to_local_is": ["shop-amazon"]}, {"move": "amazon"}, name="specific"),
+            rule({"to_local_starts_with": ["shop-"]}, {"move": "shop"}, name="broad"),
         ]}
         self.assertEqual(self.choose(cfg, ["shop-amazon@example.com"])["name"], "specific")
         self.assertEqual(self.choose(cfg, ["shop-ebay@example.com"])["name"], "broad")
 
-    def test_matchers(self):
+    def test_every_matcher_hit_and_miss(self):
+        # (field, value, hit, miss): hit/miss are choose() keyword arguments
+        to = lambda *a: {"addresses": list(a)}
         cases = [
-            ({"to": ["me"]}, {"addresses": ["Me@Example.com"]}),
-            ({"to_prefix": ["dev-"]}, {"addresses": ["dev-github@example.com"]}),
-            ({"from_contains": ["github.com"]}, {"from_addr": "noreply@github.com"}),
-            ({"from_name_contains": ["github"]}, {"from_name": "github notifications"}),
-            ({"subject_contains": ["invoice"]}, {"subject": "Your Invoice #1"}),
-            ({"subject_equals": "Hello"}, {"subject": "hello"}),
+            ("to_is", "Shop-Amazon@Example.com", to("shop-amazon@example.com"), to("shop-amazon@example.org")),
+            ("to_contains", "amazon@exa", to("shop-amazon@example.com"), to("shop-ebay@example.com")),
+            ("to_starts_with", "shop-", to("shop-amazon@example.com"), to("my-shop-amazon@example.com")),
+            ("to_ends_with", "@example.com", to("me@example.com"), to("me@example.com.au")),
+            ("to_local_is", "shop-amazon", to("shop-amazon@example.com"), to("shop-amazon2@example.com")),
+            ("to_local_contains", "amaz", to("shop-amazon@example.com"), to("shop@amazon.com")),
+            ("to_local_starts_with", "shop-", to("shop-amazon@example.com"), to("my-shop@example.com")),
+            ("to_local_ends_with", "-receipts", to("aws-receipts@example.com"), to("me@example-receipts")),
+            ("from_email_is", "noreply@github.com", {"from_addr": "noreply@github.com"}, {"from_addr": "noreply@github.com.evil"}),
+            ("from_email_contains", "github.com", {"from_addr": "n@github.com"}, {"from_addr": "hub@tig.com"}),
+            ("from_email_starts_with", "noreply@", {"from_addr": "noreply@github.com"}, {"from_addr": "x-noreply@github.com"}),
+            ("from_email_ends_with", "@github.com", {"from_addr": "n@github.com"}, {"from_addr": "n@github.community"}),
+            ("from_name_is", "GitHub", {"from_name": "github"}, {"from_name": "github bot"}),
+            ("from_name_contains", "github", {"from_name": "the github bot"}, {"from_name": "big hut"}),
+            ("from_name_starts_with", "github", {"from_name": "github bot"}, {"from_name": "the github bot"}),
+            ("from_name_ends_with", "bot", {"from_name": "github bot"}, {"from_name": "bot army"}),
+            ("subject_is", "Hello", {"subject": "hello"}, {"subject": "hello there"}),
+            ("subject_contains", "invoice", {"subject": "Your Invoice #1"}, {"subject": "voice note"}),
+            ("subject_starts_with", "re:", {"subject": "RE: lunch"}, {"subject": "Fwd: RE: lunch"}),
+            ("subject_ends_with", "[urgent]", {"subject": "Server down [URGENT]"}, {"subject": "[urgent] server"}),
         ]
-        for match, kwargs in cases:
-            with self.subTest(match=match):
-                cfg = {"rules": [rule(match, {"move": "x"})]}
-                self.assertIsNotNone(self.choose(cfg, **kwargs))
-
-    def test_string_value_is_one_token_not_characters(self):
-        # Regression: a bare string was iterated character by character,
-        # so "rachellehmannhaupt" matched almost any sender.
-        cfg = {"rules": [rule({"from_contains": "rachellehmannhaupt"}, {"move": "x"})]}
-        self.assertIsNotNone(self.choose(cfg, from_addr="rachellehmannhaupt@example.com"))
-        self.assertIsNone(self.choose(cfg, from_addr="verizon-notifications@verizon.com"))
-
-    def test_string_and_list_values_are_equivalent(self):
-        cases = [
-            ("to", "me", {"addresses": ["me@example.com"]}, {"addresses": ["mae@example.com"]}),
-            ("to_prefix", "dev-", {"addresses": ["dev-x@example.com"]}, {"addresses": ["d@example.com"]}),
-            ("from_contains", "github.com", {"from_addr": "n@github.com"}, {"from_addr": "hub@tig.com"}),
-            ("from_name_contains", "github", {"from_name": "github bot"}, {"from_name": "big hut"}),
-            ("subject_contains", "invoice", {"subject": "Invoice #1"}, {"subject": "voice note"}),
-            ("subject_equals", "hello", {"subject": "Hello"}, {"subject": "hell"}),
-        ]
+        self.assertEqual({c[0] for c in cases}, set(mail_filter.MATCHERS))
         for field, value, hit, miss in cases:
             for form in (value, [value]):
                 with self.subTest(field=field, form=form):
@@ -813,8 +811,61 @@ class ChooseRuleTests(unittest.TestCase):
                     self.assertIsNotNone(self.choose(cfg, **hit))
                     self.assertIsNone(self.choose(cfg, **miss))
 
+    def test_matching_is_case_insensitive(self):
+        cfg = {"rules": [rule({"subject_contains": "INVOICE"}, {"move": "x"})]}
+        self.assertIsNotNone(self.choose(cfg, subject="your invoice"))
+        cfg = {"rules": [rule({"to_is": "me@example.com"}, {"move": "x"})]}
+        self.assertIsNotNone(self.choose(cfg, ["ME@EXAMPLE.COM"]))
+
+    def test_to_is_needs_full_address(self):
+        cfg = {"rules": [rule({"to_is": "shop-amazon"}, {"move": "x"})]}
+        self.assertIsNone(self.choose(cfg, ["shop-amazon@example.com"]))
+
+    def test_to_local_ignores_domain(self):
+        cfg = {"rules": [rule({"to_local_is": "shop-amazon"}, {"move": "x"})]}
+        self.assertIsNotNone(self.choose(cfg, ["shop-amazon@example.com"]))
+        self.assertIsNotNone(self.choose(cfg, ["shop-amazon@other.org"]))
+        cfg = {"rules": [rule({"to_local_contains": "example"}, {"move": "x"})]}
+        self.assertIsNone(self.choose(cfg, ["me@example.com"]))
+
+    def test_any_to_address_can_match(self):
+        for field, value in (("to_is", "b@example.com"), ("to_local_is", "b")):
+            with self.subTest(field=field):
+                cfg = {"rules": [rule({field: value}, {"move": "x"})]}
+                self.assertIsNotNone(self.choose(cfg, ["a@example.com", "b@example.com"]))
+                self.assertIsNone(self.choose(cfg, ["a@example.com", "c@example.com"]))
+
+    def test_list_values_are_ored(self):
+        cfg = {"rules": [rule({"subject_contains": ["receipt", "invoice"]}, {"move": "x"})]}
+        self.assertIsNotNone(self.choose(cfg, subject="Your receipt"))
+        self.assertIsNotNone(self.choose(cfg, subject="Your invoice"))
+        self.assertIsNone(self.choose(cfg, subject="Your order"))
+
+    def test_fields_are_anded(self):
+        cfg = {"rules": [rule({"to_local_is": "shop-amazon", "subject_contains": "receipt"},
+                              {"move": "x"})]}
+        self.assertIsNotNone(self.choose(cfg, ["shop-amazon@example.com"], subject="Receipt"))
+        self.assertIsNone(self.choose(cfg, ["shop-amazon@example.com"], subject="Deals"))
+        self.assertIsNone(self.choose(cfg, ["other@example.com"], subject="Receipt"))
+
+    def test_string_value_is_one_token_not_characters(self):
+        # Regression: a bare string was iterated character by character,
+        # so "rachellehmannhaupt" matched almost any sender.
+        cfg = {"rules": [rule({"from_email_contains": "rachellehmannhaupt"}, {"move": "x"})]}
+        self.assertIsNotNone(self.choose(cfg, from_addr="rachellehmannhaupt@example.com"))
+        self.assertIsNone(self.choose(cfg, from_addr="verizon-notifications@verizon.com"))
+
+    def test_unknown_field_raises(self):
+        for field in ("from_contains", "to", "to_prefix", "subject_equals", "subjet_contains"):
+            with self.subTest(field=field):
+                cfg = {"rules": [rule({field: "x"}, {"move": "x"}, name="Typo rule")]}
+                with self.assertRaises(mail_filter.RuleConfigError) as ctx:
+                    self.choose(cfg, subject="x")
+                self.assertIn("'Typo rule'", str(ctx.exception))
+                self.assertIn(f"'{field}'", str(ctx.exception))
+
     def test_non_matching(self):
-        cfg = {"rules": [rule({"subject_equals": ["Hello"]}, {"move": "x"})]}
+        cfg = {"rules": [rule({"subject_is": ["Hello"]}, {"move": "x"})]}
         self.assertIsNone(self.choose(cfg, subject="Hello there"))
 
     def test_move_beats_delete(self):
@@ -848,12 +899,69 @@ class ChooseRuleTests(unittest.TestCase):
         self.assertFalse(result["delete"])
 
     def test_catch_all_fallback(self):
-        cfg = {"rules": [rule({"to": ["me"]}, {"move": "x"})],
+        cfg = {"rules": [rule({"to_local_is": ["me"]}, {"move": "x"})],
                "catch_all": {"move": "catch_all", "mark_read": False}}
         self.assertEqual(self.choose(cfg, ["other@example.com"]), {
             "name": "<catch_all>", "move": "catch_all", "trash": False,
             "delete": False, "mark_read": False,
         })
+
+
+class ToHeaderOnlyTests(unittest.TestCase):
+    """to_* and to_local_* read the To header only, through process_account."""
+
+    def moved(self, message, match):
+        fake = FakeIMAP({b"7": message})
+        run_account(fake, {"rules": [rule(match, {"move": "shop"})]})
+        return any(c[1] == "COPY" for c in fake.message_calls())
+
+    def test_to_header_matches(self):
+        message = raw_message(to="Other <other@example.com>, Me <me@example.com>")
+        self.assertTrue(self.moved(message, {"to_is": "me@example.com"}))
+        self.assertTrue(self.moved(message, {"to_local_is": "me"}))
+
+    def test_other_recipient_headers_are_ignored(self):
+        for header in ("Cc", "Delivered-To", "X-Original-To"):
+            message = raw_message(to="other@example.com", headers=[(header, "me@example.com")])
+            for match in ({"to_is": "me@example.com"}, {"to_local_is": "me"}):
+                with self.subTest(header=header, match=match):
+                    self.assertFalse(self.moved(message, match))
+
+
+class ValidateRulesTests(unittest.TestCase):
+
+    def test_valid_rules_pass(self):
+        cfg = {"rules": [rule({m: "x" for m in mail_filter.MATCHERS}, {"move": "x"}),
+                         rule({}, {"delete": True}), {"name": "no match key", "do": {}}]}
+        self.assertEqual(mail_filter.validate_rules(cfg), [])
+
+    def test_reports_every_unknown_field(self):
+        cfg = {"rules": [rule({"subject_contains": "a"}, {"move": "x"}, name="Fine"),
+                         rule({"from_contains": "github.com", "to": "me"}, {"move": "x"}, name="GitHub")]}
+        self.assertEqual(mail_filter.validate_rules(cfg), [
+            "rule #2 'GitHub' uses unknown match field 'from_contains'",
+            "rule #2 'GitHub' uses unknown match field 'to'",
+        ])
+
+    def test_main_rejects_unknown_field_before_connecting(self):
+        configs = {
+            "accounts.local.json5": {"accounts": [ACCOUNT]},
+            "folders.local.json5": {"folders": {"test": FOLDERS}},
+            "rules.local.json5": {"test": {"rules": [rule({"to_prefix": "shop-"}, {"move": "shop"})]}},
+        }
+        connect = mock.Mock(side_effect=AssertionError("connected despite bad rules"))
+        with mock.patch.object(mail_filter, "load_json", lambda path: configs[Path(path).name]), \
+                mock.patch.object(mail_filter.imaplib, "IMAP4_SSL", connect), \
+                redirect_stdout(io.StringIO()) as out:
+            with self.assertRaises(SystemExit) as ctx:
+                mail_filter.main()
+        connect.assert_not_called()
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("] [test] ERROR: rule #1 'r' uses unknown match field 'to_prefix'\n",
+                      out.getvalue())
+        self.assertIn("ERROR: 1 unknown match field(s) in rules.local.json5; no mail processed",
+                      out.getvalue())
+        self.assertNotIn("Traceback", out.getvalue())
 
 
 if __name__ == "__main__":
