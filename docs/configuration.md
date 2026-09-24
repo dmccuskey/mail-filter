@@ -21,6 +21,16 @@ The `.local.json5` files contain the actual deployment configuration.
 
 The `.local.json5` files must be located in the same directory as `mail_filter.py` and `list_folders.py`; both scripts resolve them relative to their own location.
 
+All three files have the same shape: an object keyed by account ID, with that account's settings as the value.
+
+```json5
+{
+  "<account id>": { /* settings for that account */ }
+}
+```
+
+An account ID in `accounts.local.json5` selects the entry with the same key in `folders.local.json5` and `rules.local.json5`. Accounts are processed in the order they appear in `accounts.local.json5`.
+
 ## Accounts
 
 `accounts.local.json5` defines the IMAP accounts processed by the engine.
@@ -29,8 +39,7 @@ Schema:
 
 ```text
 accounts.local.json5
-└─ accounts: [ ... ]            one entry per IMAP account
-   ├─ id          string        selects this account's folders and rules
+└─ <account id>                 one entry per IMAP account
    ├─ imap_host   string
    ├─ username    string
    └─ password    string
@@ -40,24 +49,21 @@ Structure:
 
 ```json5
 {
-  "accounts": [
-    {
-      "id": "gmail-main",
-      "imap_host": "imap.gmail.com",
-      "username": "username@gmail.com",
-      "password": "password"
-    }
-  ]
+  "gmail-main": {
+    "imap_host": "imap.gmail.com",
+    "username": "username@gmail.com",
+    "password": "password"
+  }
 }
 ```
 
 ### Fields
 
-#### `id`
+#### Account ID (the key)
 
 Unique internal identifier for the account.
 
-The ID is also used to select the account's folder and rule configuration.
+The ID is the key of the account's entry, and the same key selects the account's folder and rule configuration.
 
 Examples:
 
@@ -89,21 +95,18 @@ Schema:
 
 ```text
 folders.local.json5
-└─ folders
-   └─ <account id>
-      ├─ <folder key>: "<mailbox>"   any number; used by move
-      └─ trash: "<mailbox>"          optional, reserved (see below)
+└─ <account id>
+   ├─ <folder key>: "<mailbox>"   any number; used by move
+   └─ trash: "<mailbox>"          optional, reserved (see below)
 ```
 
 Example:
 
 ```json5
 {
-  "folders": {
-    "aerospace-account": {
-      "services_payments": "INBOX.Services.Payments",
-      "services_to_review": "INBOX.Services.To Review"
-    }
+  "aerospace-account": {
+    "services_payments": "INBOX.Services.Payments",
+    "services_to_review": "INBOX.Services.To Review"
   }
 }
 ```
@@ -206,6 +209,17 @@ An optional `catch_all` sits in the account next to `rules`, and applies only wh
 ```
 
 Like any `move`, `archive` here is a folder key from `folders.local.json5`.
+
+## Upgrading from the Old Format
+
+Earlier versions wrapped two of the files:
+
+- `accounts.local.json5` held an `"accounts"` list, with an `"id"` field in each entry.
+- `folders.local.json5` wrapped its accounts in a `"folders"` object.
+
+To upgrade, remove the `"accounts"` list and make each account's `id` its key (dropping the `"id"` field), and remove the `"folders"` wrapper. `rules.local.json5` is unchanged.
+
+An old-format file is never guessed at: `mail_filter.py` logs an `ERROR: ... uses the old format` line for each one, processes no mail, and exits with status 1. `list_folders.py` also refuses the old `accounts.local.json5` format.
 
 ## Local vs Example Configuration
 

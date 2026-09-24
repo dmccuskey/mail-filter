@@ -203,6 +203,34 @@ def validate_rules(rules_cfg):
     return problems
 
 
+def validate_config_format(accounts_all, folders_all):
+    """
+    Return a message for every config file problem (empty if none).
+
+    Every config file is an object keyed by account ID; the old
+    "accounts" list and "folders" wrapper are rejected, not guessed at.
+    """
+    problems = []
+    if isinstance(accounts_all.get("accounts"), list):
+        problems.append(
+            'accounts.local.json5 uses the old format (top-level "accounts" list); '
+            "key each account by its ID instead (see docs/configuration.md)"
+        )
+    else:
+        problems.extend(
+            f"account '{account_id}' in accounts.local.json5 must be an object"
+            for account_id, cfg in accounts_all.items()
+            if not isinstance(cfg, dict)
+        )
+
+    if "folders" in folders_all and "folders" not in accounts_all:
+        problems.append(
+            'folders.local.json5 uses the old format (top-level "folders" wrapper); '
+            "remove the wrapper so accounts are top-level keys (see docs/configuration.md)"
+        )
+    return problems
+
+
 def match_field_matches(field, values, message):
     """
     True if any candidate string for the field matches any value
@@ -580,13 +608,23 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
 def main():
     base = Path(__file__).resolve().parent  # directory containing this script
 
-    accounts_cfg = load_json(base / "accounts.local.json5")
-    folders_cfg_all = load_json(base / "folders.local.json5")["folders"]
+    accounts_all = load_json(base / "accounts.local.json5")
+    folders_cfg_all = load_json(base / "folders.local.json5")
     rules_all = load_json(base / "rules.local.json5")
+
+    # Reject a malformed or old-format config before connecting to any account
+    format_problems = validate_config_format(accounts_all, folders_cfg_all)
+    for problem in format_problems:
+        log(f"ERROR: {problem}")
+    if format_problems:
+        log("ERROR: configuration format problem(s); no mail processed")
+        sys.exit(1)
+
+    accounts = [{**cfg, "id": account_id} for account_id, cfg in accounts_all.items()]
 
     # Reject unknown match fields before connecting to any account
     problem_count = 0
-    for account in accounts_cfg["accounts"]:
+    for account in accounts:
         account_rules = rules_all.get(account["id"])
         for problem in validate_rules(account_rules or {}):
             log(f"[{account['id']}] ERROR: {problem}")
@@ -598,7 +636,7 @@ def main():
         )
         sys.exit(1)
 
-    for account in accounts_cfg["accounts"]:
+    for account in accounts:
         account_id = account["id"]
         account_folders = folders_cfg_all.get(account_id)
         account_rules = rules_all.get(account_id)

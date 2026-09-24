@@ -20,7 +20,7 @@ folders.local.json5
 rules.local.json5
 ```
 
-Account IDs join the account entry to its folder mappings and rules. This organization was chosen because loading and passing multiple account configurations was simpler and less unwieldy than managing a collection of per-account files.
+Account IDs join the account entry to its folder mappings and rules. [ADR 007](007-account-keyed-configuration.md) makes each file an object keyed by account ID. This organization was chosen because loading and passing multiple account configurations was simpler and less unwieldy than managing a collection of per-account files.
 
 Commit corresponding `*.example.json5` files as templates. Keep live `*.local.json5` files out of Git.
 

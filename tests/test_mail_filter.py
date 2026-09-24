@@ -121,7 +121,8 @@ class FakeIMAP:
         return [c for c in self.calls if c[0] == "UID" and c[1] in ("STORE", "COPY")]
 
 
-ACCOUNT = {"id": "test", "imap_host": "imap.example.com", "username": "u", "password": "p"}
+ACCOUNT_CFG = {"imap_host": "imap.example.com", "username": "u", "password": "p"}
+ACCOUNT = {"id": "test", **ACCOUNT_CFG}
 FOLDERS = {"shop": "Shopping", "archive": "Archive"}
 TRASH_FOLDERS = {**FOLDERS, "trash": "INBOX.Trash"}
 GMAIL_FOLDERS = {"github": "GitHub", "trash": "[Gmail]/Trash"}
@@ -945,8 +946,8 @@ class ValidateRulesTests(unittest.TestCase):
 
     def test_main_rejects_unknown_field_before_connecting(self):
         configs = {
-            "accounts.local.json5": {"accounts": [ACCOUNT]},
-            "folders.local.json5": {"folders": {"test": FOLDERS}},
+            "accounts.local.json5": {"test": ACCOUNT_CFG},
+            "folders.local.json5": {"test": FOLDERS},
             "rules.local.json5": {"test": {"rules": [rule({"to_prefix": "shop-"}, {"move": "shop"})]}},
         }
         connect = mock.Mock(side_effect=AssertionError("connected despite bad rules"))
@@ -962,6 +963,74 @@ class ValidateRulesTests(unittest.TestCase):
         self.assertIn("ERROR: 1 unknown match field(s) in rules.local.json5; no mail processed",
                       out.getvalue())
         self.assertNotIn("Traceback", out.getvalue())
+
+
+class ConfigFormatTests(unittest.TestCase):
+    """Every config file is keyed by account ID; the old wrappers are rejected."""
+
+    RULES = {"test": {"rules": [rule({"to_local_is": ["me"]}, {"move": "shop"})]}}
+
+    def run_main(self, accounts, folders):
+        configs = {
+            "accounts.local.json5": accounts,
+            "folders.local.json5": folders,
+            "rules.local.json5": self.RULES,
+        }
+        process = mock.Mock()
+        with mock.patch.object(mail_filter, "load_json", lambda path: configs[Path(path).name]), \
+                mock.patch.object(mail_filter, "process_account", process), \
+                redirect_stdout(io.StringIO()) as out:
+            try:
+                mail_filter.main()
+                code = None
+            except SystemExit as exc:
+                code = exc.code
+        return code, out.getvalue(), process
+
+    def test_valid_config_has_no_problems(self):
+        self.assertEqual(
+            mail_filter.validate_config_format({"test": ACCOUNT_CFG}, {"test": FOLDERS}), [])
+
+    def test_accounts_processed_in_file_order_with_id(self):
+        accounts = {"b": ACCOUNT_CFG, "a": ACCOUNT_CFG}
+        folders = {"b": FOLDERS, "a": FOLDERS}
+        self.RULES = {"b": self.RULES["test"], "a": self.RULES["test"]}
+        code, _, process = self.run_main(accounts, folders)
+        self.assertIsNone(code)
+        self.assertEqual([c.args[0] for c in process.call_args_list],
+                         [{"id": "b", **ACCOUNT_CFG}, {"id": "a", **ACCOUNT_CFG}])
+
+    def test_old_accounts_list_rejected(self):
+        code, out, process = self.run_main({"accounts": [ACCOUNT]}, {"test": FOLDERS})
+        self.assertEqual(code, 1)
+        process.assert_not_called()
+        self.assertIn('ERROR: accounts.local.json5 uses the old format (top-level "accounts" list)',
+                      out)
+        self.assertIn("ERROR: configuration format problem(s); no mail processed", out)
+        self.assertNotIn("Traceback", out)
+
+    def test_old_folders_wrapper_rejected(self):
+        code, out, process = self.run_main({"test": ACCOUNT_CFG}, {"folders": {"test": FOLDERS}})
+        self.assertEqual(code, 1)
+        process.assert_not_called()
+        self.assertIn('ERROR: folders.local.json5 uses the old format (top-level "folders" wrapper)',
+                      out)
+
+    def test_both_old_formats_reported_together(self):
+        problems = mail_filter.validate_config_format(
+            {"accounts": [ACCOUNT]}, {"folders": {"test": FOLDERS}})
+        self.assertEqual(len(problems), 2)
+        self.assertTrue(problems[0].startswith("accounts.local.json5 uses the old format"))
+        self.assertTrue(problems[1].startswith("folders.local.json5 uses the old format"))
+
+    def test_account_named_folders_is_allowed(self):
+        self.assertEqual(
+            mail_filter.validate_config_format({"folders": ACCOUNT_CFG}, {"folders": FOLDERS}), [])
+
+    def test_non_object_account_rejected(self):
+        self.assertEqual(
+            mail_filter.validate_config_format({"test": "imap.example.com"}, {}),
+            ["account 'test' in accounts.local.json5 must be an object"])
 
 
 if __name__ == "__main__":

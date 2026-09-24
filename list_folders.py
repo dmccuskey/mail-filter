@@ -27,10 +27,15 @@ except Exception as e:
     print(f"Error parsing '{CONFIG_FILE}': {e}")
     sys.exit(1)
 
-# Find matching account
-account = next((acc for acc in config.get("accounts", []) if acc.get("id") == target_id), None)
+if isinstance(config.get("accounts"), list):
+    print(f'Error: {CONFIG_FILE} uses the old format (top-level "accounts" list); '
+          "key each account by its ID instead (see docs/configuration.md).")
+    sys.exit(1)
 
-if not account:
+# Accounts are keyed by ID
+account = config.get(target_id)
+
+if not isinstance(account, dict):
     print(f"Error: Account ID '{target_id}' not found in {CONFIG_FILE}.")
     sys.exit(1)
 

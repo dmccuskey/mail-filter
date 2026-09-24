@@ -69,7 +69,7 @@ Usage:
 python list_folders.py gmail-main
 ```
 
-The account ID must correspond to an entry in `accounts.local.json5`.
+The account ID must be a key in `accounts.local.json5`.
 
 The utility prints both the raw IMAP folder listing and extracted mailbox names.
 
