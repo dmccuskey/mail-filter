@@ -955,6 +955,25 @@ class ChooseRuleTests(unittest.TestCase):
         })
 
 
+class FoldedHeaderTests(unittest.TestCase):
+    """A long header folded onto several lines is unfolded before matching and logging."""
+
+    def test_folded_subject_matches_and_logs_one_line(self):
+        raw = (b"From: a@example.com\r\nTo: me@example.com\r\n"
+               b"Subject: A fairly long subject that the sender folded\r\n onto a second line\r\n"
+               b"\r\nbody\r\n")
+        rules = {"rules": [rule({"subject_contains": "folded onto"}, {"move": "shop"}, "fold")]}
+        out = run_account(FakeIMAP({b"1": raw}), rules)
+        self.assertEqual(message_lines(out), [
+            "[test] MATCHED #1 RULE='fold' SUBJECT='A fairly long subject that the sender "
+            "folded onto a second line' → Shopping"])
+
+    def test_folded_encoded_words(self):
+        self.assertEqual(
+            mail_filter.decode_mime_header("=?utf-8?q?caf=C3=A9_long?=\r\n =?utf-8?q?_folded?="),
+            "café long folded")
+
+
 class ToHeaderOnlyTests(unittest.TestCase):
     """to_* and to_local_* read the To header only, through process_account."""
 

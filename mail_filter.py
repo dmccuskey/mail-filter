@@ -166,6 +166,8 @@ def decode_mime_header(value: str) -> str:
     """
     if not value:
         return ""
+    # Unfold (RFC 5322): a long header arrives split by CRLF + whitespace
+    value = re.sub(r"\r?\n(?=[ \t])", "", value)
     parts = []
     for text, charset in decode_header(value):
         if isinstance(text, bytes):
