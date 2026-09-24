@@ -138,17 +138,13 @@ The key `trash` is reserved for the `trash` action and is optional. Trash is a r
 
 Add a `trash` mapping only to override the server's Trash mailbox, or for a server that does not advertise `\Trash`. To see what a server advertises, run `python3 list_folders.py <account_id>` and look for `\Trash` in the attributes.
 
-This abstraction allows the same rule vocabulary to work with different mailbox naming conventions.
+Because rules refer to folders only by key, each mailbox name is written in one place. If a mailbox is renamed on the server, or you want a different mailbox to receive a key's messages, change that one mapping; the rules that use the key stay as they are.
 
-For example:
+For example, after renaming `INBOX.Services.Payments` to `INBOX.Finance.Payments` on the server, update only the mapping:
 
-```text
-services_payments
-        ↓
-INBOX.Services.Payments
+```json5
+"services_payments": "INBOX.Finance.Payments"
 ```
-
-A different account can map the same key differently.
 
 ## Folder Validation
 
