@@ -27,11 +27,11 @@ mail-filter/
 ├── mail_filter.py
 ├── list_folders.py
 ├── accounts.example.json5
-├── accounts.local.json5
+├── accounts.local.json5      # you create (gitignored)
 ├── folders.example.json5
-├── folders.local.json5
+├── folders.local.json5       # you create (gitignored)
 ├── rules.example.json5
-├── rules.local.json5
+├── rules.local.json5         # you create (gitignored)
 ├── docs/
 │   ├── architecture.md
 │   ├── configuration.md
@@ -40,11 +40,7 @@ mail-filter/
 │   ├── imap-notes.md
 │   ├── development.md
 │   └── decisions/
-│       ├── 001-headless-pi-python-imap.md
-│       ├── 002-configuration-driven-filtering.md
-│       ├── 003-logical-folder-abstraction.md
-│       ├── 004-first-match-rule-evaluation.md
-│       └── 005-uid-based-message-identification.md
+│       └── <project ADRs>
 ├── tests/
 │   └── test_mail_filter.py
 └── README.md
