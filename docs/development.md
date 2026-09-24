@@ -43,7 +43,7 @@ This baseline should remain easy to restore.
 
 ## Possible Future Changes
 
-Ideas that have come up but are not decided. Each needs further discussion before it is worked on, and should be implemented only when there is a concrete use case.
+Decided work is tracked as [GitHub issues](https://github.com/dmccuskey/mail-filter/issues). The ideas below have come up but are not decided. Each needs further discussion before it is worked on, and should be implemented only when there is a concrete use case.
 
 ### Rule Features
 
