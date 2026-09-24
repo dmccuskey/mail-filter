@@ -88,7 +88,7 @@ Development checkpoints, planned changes, the completed UID migration, and the r
 
 The current implementation is the known-good live baseline.
 
-Message operations use IMAP UIDs rather than sequence numbers (see ADR 005). `move`, `trash`, and `delete` are distinct actions; on Gmail, `move` and `trash` remove the `\Inbox` label instead of using `\Deleted` and EXPUNGE (see ADR 006).
+Message operations use IMAP UIDs rather than sequence numbers (see ADR 005). `move`, `trash`, and `delete` are distinct actions; on Gmail, `move` and `trash` use `UID MOVE` instead of `\Deleted` and EXPUNGE (see ADR 006).
 
 The project intentionally keeps those changes separate so the current live filtering system remains easy to revert.
 

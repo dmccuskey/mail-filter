@@ -1,6 +1,6 @@
 # ADR 006: Gmail Move Semantics and an Explicit Trash Action
 
-**Status:** Accepted
+**Status:** Accepted; amended 2026-09-24 (Gmail uses `UID MOVE`; see [Amendment](#amendment-gmail-uses-uid-move))
 
 ## Context
 
@@ -36,13 +36,13 @@ Configuration always overrides the server. Discovery uses only `imaplib`'s publi
 Detect Gmail by the `X-GM-EXT-1` capability. Use a small Gmail branch inside the shared move path rather than a separate handler; `move` and `trash` both use it:
 
 ```text
-generic IMAP                      Gmail
-UID COPY <uid> "<mailbox>"        UID COPY <uid> "<mailbox>"
-UID STORE <uid> +FLAGS (\Deleted) UID STORE <uid> -X-GM-LABELS (\Inbox)
+generic IMAP                      Gmail (as amended)
+UID COPY <uid> "<mailbox>"        UID MOVE <uid> "<mailbox>"
+UID STORE <uid> +FLAGS (\Deleted)
 EXPUNGE (after the loop)
 ```
 
-On Gmail, `COPY` adds the destination label and removing `\Inbox` takes the message out of `INBOX` while its other labels remain. Gmail moves and trashes never set `\Deleted` and never require `EXPUNGE`. For `trash`, Gmail's own Trash semantics apply once the message is in the Trash mailbox; the `\Inbox` removal is kept so leaving `INBOX` does not depend on that.
+On Gmail, `UID MOVE` adds the destination label and removes `\Inbox` in one step, so the message leaves `INBOX` while its other labels remain. Gmail moves and trashes never set `\Deleted` and never require `EXPUNGE`. For `trash`, Gmail's own Trash semantics apply once the message is in the Trash mailbox.
 
 Every message-level operation uses the message UID, as required by [ADR 005](005-uid-based-message-identification.md).
 
@@ -50,7 +50,7 @@ Fail safely:
 
 - A missing folder mapping for `move`, or an unresolved Trash mailbox for `trash`, skips the message.
 - A failed `COPY` skips the message before anything is removed.
-- A failed `\Inbox` label removal is logged; the message stays in `INBOX` and is never marked `\Deleted` as a fallback.
+- A refused Gmail `UID MOVE` is logged; the message stays in `INBOX` and is never marked `\Deleted` as a fallback. A Gmail server that does not advertise `MOVE` skips `move` and `trash`.
 - If the capability query fails, the provider is unknown and `move` and `trash` are skipped rather than processed with generic semantics. `delete` is unaffected.
 - `EXPUNGE` runs only when the run marked at least one message `\Deleted`.
 
@@ -76,8 +76,27 @@ Alternatives not adopted:
 
 - Requiring a `trash` mapping for every account: treats a server-defined role as an owner-organized folder and repeats provider- and language-specific names in every account's configuration.
 - Built-in Trash names per provider (for example `[Gmail]/Trash`): Gmail's system folder names vary by region and language, and generic servers have no common name.
-- `UID MOVE`: supported by Gmail, but it would introduce a third removal mechanism without improving on the explicit `X-GM-LABELS` operation, and changing generic servers to it is outside this decision.
+- `UID MOVE`: originally not adopted, in favor of `COPY` plus `-X-GM-LABELS (\Inbox)`. The amendment below adopts it for Gmail after that operation turned out not to work. Changing generic servers to it remains outside this decision.
 - `UID STORE +X-GM-LABELS (\Trash)`: avoids a mailbox name, but is not described in Google's extension documentation and would replace the verified Gmail operation.
 - `LIST ... RETURN (SPECIAL-USE)`: requires LIST-EXTENDED and private `imaplib` internals. Both production servers include `\Trash` in a plain `LIST`.
 
-The decision was verified through automated tests using a fake IMAP connection that returns responses in the shapes `imaplib` returns and asserts the exact IMAP command sequences for generic and Gmail `move`, `trash`, and `delete`, Trash resolution, and the failure paths above; and through live testing against the Gmail and non-Gmail production accounts, including Gmail `move`, `trash` through both a configured `trash` mapping and the server-advertised `\Trash` mailbox, and the generic `move` and `delete` behavior.
+The decision was verified through automated tests using a fake IMAP connection that returns responses in the shapes `imaplib` returns and asserts the exact IMAP command sequences for generic and Gmail `move`, `trash`, and `delete`, Trash resolution, and the failure paths above; and through manual live testing against the Gmail and non-Gmail production accounts. The manual Gmail check missed that moved messages kept `\Inbox`; see the amendment.
+
+## Amendment: Gmail Uses UID MOVE
+
+The [live IMAP tests](008-live-imap-tests.md) showed that on Gmail, `UID STORE <uid> -X-GM-LABELS (\Inbox)` sent with `INBOX` selected returns `OK` but does not remove the label, quoted (`("\\Inbox")`) or not. Gmail's reply omits the selected mailbox's own label from `X-GM-LABELS`, which made the command look successful. Checked in `[Gmail]/All Mail` minutes later, the messages still carried `\Inbox`: every Gmail `move`, and every `trash` to a mailbox other than `[Gmail]/Trash`, had added the destination label and left the message in the inbox. (`COPY` to `[Gmail]/Trash` worked regardless, because Gmail removes the other labels of a message copied to Trash.)
+
+On the same account, two alternatives worked:
+
+- `UID STORE -X-GM-LABELS (\Inbox)` with `[Gmail]/All Mail` selected instead of `INBOX`;
+- `UID MOVE <uid> "<mailbox>"` from `INBOX` (RFC 6851; Gmail advertises `MOVE`).
+
+Gmail `move` and `trash` now use `UID MOVE`:
+
+- It is one command, so there is no partial state: if it is refused, the message stays in `INBOX` and nothing else has changed.
+- It needs no All Mail lookup, and so does not depend on All Mail being shown in IMAP.
+- Like the label removal, it does not depend on Gmail's expunge settings.
+- `mark_read` is applied before the move, while the message's `INBOX` UID is still valid.
+- If Gmail stops advertising `MOVE`, `move` and `trash` are skipped rather than falling back to another method.
+
+Generic IMAP servers are unchanged.

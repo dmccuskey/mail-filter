@@ -62,15 +62,16 @@ class FakeIMAP:
 
     def __init__(self, messages, copy_status="OK", gmail=False,
                  capability_status="OK", failing_stores=(),
-                 mailboxes=None, list_status="OK"):
+                 mailboxes=None, list_status="OK", move_status="OK", capabilities=None):
         # messages: {uid (bytes): raw RFC 822 bytes}
         self.messages = messages
         self.copy_status = copy_status
+        self.move_status = move_status
         # imaplib returns capabilities as one space-separated line
-        self.capability_response = (
-            capability_status, [GMAIL_CAPABILITIES if gmail else GENERIC_CAPABILITIES]
-        )
-        # (item, flags) pairs whose UID STORE returns NO, e.g. ("-X-GM-LABELS", r"(\Inbox)")
+        if capabilities is None:
+            capabilities = GMAIL_CAPABILITIES if gmail else GENERIC_CAPABILITIES
+        self.capability_response = (capability_status, [capabilities])
+        # (item, flags) pairs whose UID STORE returns NO, e.g. ("+FLAGS", "(\\Deleted)")
         self.failing_stores = set(failing_stores)
         self.list_response = (list_status, NO_ROLE_LIST if mailboxes is None else mailboxes)
         self.calls = []
@@ -100,6 +101,8 @@ class FakeIMAP:
             return "OK", [(uid + b" (UID " + uid + b" BODY[] {n}", self.messages[uid]), b")"]
         if command == "COPY":
             return self.copy_status, [b""]
+        if command == "MOVE":
+            return self.move_status, [None]
         if command == "STORE":
             status = "NO" if tuple(args[1:]) in self.failing_stores else "OK"
             return status, [b""]
@@ -118,7 +121,7 @@ class FakeIMAP:
     search = fetch = store = copy = _sequence_command
 
     def message_calls(self):
-        return [c for c in self.calls if c[0] == "UID" and c[1] in ("STORE", "COPY")]
+        return [c for c in self.calls if c[0] == "UID" and c[1] in ("STORE", "COPY", "MOVE")]
 
 
 ACCOUNT_CFG = {"imap_host": "imap.example.com", "username": "u", "password": "p"}
@@ -129,7 +132,6 @@ GMAIL_FOLDERS = {"github": "GitHub", "trash": "[Gmail]/Trash"}
 
 SEEN = ("+FLAGS", "(\\Seen)")
 DELETED = ("+FLAGS", "(\\Deleted)")
-REMOVE_INBOX = ("-X-GM-LABELS", r"(\Inbox)")
 
 
 def run_account(fake, rules, folders=FOLDERS, dry_run=False):
@@ -334,7 +336,7 @@ class GenericSafetyTests(unittest.TestCase):
 
 
 class GmailTests(unittest.TestCase):
-    """Gmail (X-GM-EXT-1): COPY adds the label, -X-GM-LABELS removes \\Inbox."""
+    """Gmail (X-GM-EXT-1): UID MOVE adds the label and removes \\Inbox in one step."""
 
     def all_stores(self, fake):
         return [c for c in fake.calls if c[:2] == ("UID", "STORE")]
@@ -344,15 +346,12 @@ class GmailTests(unittest.TestCase):
             self.assertNotIn("\\Deleted", " ".join(str(a) for a in call[3:]))
         self.assertNotIn(("EXPUNGE",), fake.calls)
 
-    def test_move_adds_label_and_removes_inbox_without_expunge(self):
+    def test_move_uses_uid_move_without_expunge(self):
         fake = FakeIMAP({b"42": raw_message(from_="noreply@github.com")}, gmail=True)
         run_account(fake, {"rules": [rule({"from_email_contains": "github.com"}, {"move": "github"})]},
                     folders=GMAIL_FOLDERS)
 
-        self.assertEqual(fake.message_calls(), [
-            ("UID", "COPY", b"42", '"GitHub"'),
-            ("UID", "STORE", b"42") + REMOVE_INBOX,
-        ])
+        self.assertEqual(fake.message_calls(), [("UID", "MOVE", b"42", '"GitHub"')])
         self.assert_never_deleted(fake)
 
     def test_move_with_mark_read(self):
@@ -362,19 +361,15 @@ class GmailTests(unittest.TestCase):
 
         self.assertEqual(fake.message_calls(), [
             ("UID", "STORE", b"42") + SEEN,
-            ("UID", "COPY", b"42", '"GitHub"'),
-            ("UID", "STORE", b"42") + REMOVE_INBOX,
+            ("UID", "MOVE", b"42", '"GitHub"'),
         ])
         self.assert_never_deleted(fake)
 
-    def test_trash_copies_to_configured_trash_and_removes_inbox(self):
+    def test_trash_moves_to_configured_trash(self):
         fake = FakeIMAP({b"42": raw_message(subject="Spam offer")}, gmail=True)
         run_account(fake, {"rules": [rule(ANY, {"trash": True})]}, folders=GMAIL_FOLDERS)
 
-        self.assertEqual(fake.message_calls(), [
-            ("UID", "COPY", b"42", '"[Gmail]/Trash"'),
-            ("UID", "STORE", b"42") + REMOVE_INBOX,
-        ])
+        self.assertEqual(fake.message_calls(), [("UID", "MOVE", b"42", '"[Gmail]/Trash"')])
         self.assert_never_deleted(fake)
 
     def test_trash_without_mapping_or_server_trash_leaves_message_untouched(self):
@@ -384,25 +379,43 @@ class GmailTests(unittest.TestCase):
         self.assertEqual(fake.message_calls(), [])
         self.assertNotIn(("EXPUNGE",), fake.calls)
 
-    def test_copy_failure_keeps_inbox_label(self):
-        fake = FakeIMAP({b"42": raw_message()}, gmail=True, copy_status="NO")
-        run_account(fake, {"rules": [rule(ANY, {"move": "github"})]}, folders=GMAIL_FOLDERS)
-
-        self.assertEqual(fake.message_calls(), [("UID", "COPY", b"42", '"GitHub"')])
-        self.assert_never_deleted(fake)
-
-    def test_label_removal_failure_never_falls_back_to_deleted(self):
+    def test_move_failure_never_falls_back(self):
         fake = FakeIMAP({b"42": raw_message(), b"43": raw_message()}, gmail=True,
-                        failing_stores=[REMOVE_INBOX])
-        run_account(fake, {"rules": [rule(ANY, {"trash": True})]}, folders=GMAIL_FOLDERS)
+                        move_status="NO")
+        output = run_account(fake, {"rules": [rule(ANY, {"trash": True})]},
+                             folders=GMAIL_FOLDERS)
 
         self.assertEqual(fake.message_calls(), [
-            ("UID", "COPY", b"42", '"[Gmail]/Trash"'),
-            ("UID", "STORE", b"42") + REMOVE_INBOX,
-            ("UID", "COPY", b"43", '"[Gmail]/Trash"'),
-            ("UID", "STORE", b"43") + REMOVE_INBOX,
+            ("UID", "MOVE", b"42", '"[Gmail]/Trash"'),
+            ("UID", "MOVE", b"43", '"[Gmail]/Trash"'),
         ])
         self.assert_never_deleted(fake)
+        self.assertIn("FAILED: move to '[Gmail]/Trash' refused (status=NO); left in INBOX", output)
+
+    def test_never_removes_inbox_label_with_store(self):
+        # Gmail accepts -X-GM-LABELS (\Inbox) with INBOX selected but ignores it
+        fake = FakeIMAP({b"42": raw_message()}, gmail=True)
+        run_account(fake, {"rules": [rule(ANY, {"move": "github"})]}, folders=GMAIL_FOLDERS)
+        self.assertFalse([c for c in fake.calls if "-X-GM-LABELS" in c])
+        self.assertNotIn("COPY", [c[1] for c in fake.calls if c[0] == "UID"])
+
+    def test_gmail_without_move_skips_move_and_trash(self):
+        caps = GMAIL_CAPABILITIES.replace(b" MOVE", b"")
+        fake = FakeIMAP({b"42": raw_message(subject="a"), b"43": raw_message(subject="b"),
+                         b"44": raw_message(subject="c")}, gmail=True, capabilities=caps)
+        output = run_account(fake, {"rules": [
+            rule({"subject_is": "a"}, {"move": "github"}, "m"),
+            rule({"subject_is": "b"}, {"trash": True}, "t"),
+            rule({"subject_is": "c"}, {"delete": True}, "d"),
+        ]}, folders=GMAIL_FOLDERS)
+
+        self.assertIn("[test] ERROR: Gmail server does not advertise MOVE; "
+                      "move and trash actions will be skipped", output)
+        self.assertEqual(message_lines(output)[:2], [
+            "[test] MATCHED #42 RULE='m' SUBJECT='a' SKIPPED: Gmail server does not advertise MOVE",
+            "[test] MATCHED #43 RULE='t' SUBJECT='b' SKIPPED: Gmail server does not advertise MOVE",
+        ])
+        self.assertEqual(fake.message_calls(), [("UID", "STORE", b"44") + DELETED])
 
     def test_delete_keeps_deleted_and_expunge_semantics(self):
         fake = FakeIMAP({b"42": raw_message()}, gmail=True)
@@ -420,8 +433,7 @@ class GmailTests(unittest.TestCase):
         ]}, folders=GMAIL_FOLDERS)
 
         self.assertEqual(fake.message_calls(), [
-            ("UID", "COPY", b"7", '"GitHub"'),
-            ("UID", "STORE", b"7") + REMOVE_INBOX,
+            ("UID", "MOVE", b"7", '"GitHub"'),
             ("UID", "STORE", b"9") + DELETED,
         ])
         self.assertEqual(fake.calls[-1], ("EXPUNGE",))
@@ -549,10 +561,7 @@ class TrashResolutionTests(unittest.TestCase):
         fake = FakeIMAP({b"42": raw_message()}, gmail=True, mailboxes=GMAIL_LIST)
         run_account(fake, {"rules": [rule(ANY, {"trash": True})]}, folders={"github": "GitHub"})
 
-        self.assertEqual(fake.message_calls(), [
-            ("UID", "COPY", b"42", '"[Gmail]/Trash"'),
-            ("UID", "STORE", b"42") + REMOVE_INBOX,
-        ])
+        self.assertEqual(fake.message_calls(), [("UID", "MOVE", b"42", '"[Gmail]/Trash"')])
         self.assertNotIn(("EXPUNGE",), fake.calls)
 
     def test_mapping_overrides_server_trash_and_skips_list(self):
@@ -702,9 +711,8 @@ class LogFormatTests(unittest.TestCase):
             ({"move": "shop"}, FOLDERS, {"failing_stores": [DELETED]},
              "FAILED: \\Deleted not set (status=NO); copied to 'Shopping', still in INBOX"),
             ({"move": "github", "mark_read": True}, GMAIL_FOLDERS,
-             {"gmail": True, "failing_stores": [REMOVE_INBOX]},
-             "FAILED: \\Inbox label not removed (status=NO); "
-             "copied to 'GitHub', still in INBOX (marked read)"),
+             {"gmail": True, "move_status": "NO"},
+             "FAILED: move to 'GitHub' refused (status=NO); left in INBOX (marked read)"),
             ({"delete": True}, FOLDERS, {"failing_stores": [DELETED]},
              "FAILED: \\Deleted not set (status=NO); left in INBOX"),
             ({"mark_read": True}, FOLDERS, {"failing_stores": [SEEN]},

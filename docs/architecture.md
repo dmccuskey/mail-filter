@@ -15,7 +15,7 @@ The system:
 5. Extracts recipients, sender information, and subject.
 6. Evaluates the configured rules in order.
 7. Applies the first matching rule.
-8. Removes moved or trashed messages from `INBOX`: by removing the `\Inbox` label on Gmail, or by marking them `\Deleted` on other servers.
+8. Removes moved or trashed messages from `INBOX`: with `UID MOVE` on Gmail, or by copying them and marking the originals `\Deleted` on other servers.
 9. Expunges messages marked `\Deleted`, once, after the processing loop.
 10. Logs the result.
 
@@ -160,7 +160,7 @@ The currently implemented actions are:
 
 If more than one of `move`, `trash`, and `delete` is specified, the least destructive wins: `move`, then `trash`, then `delete`.
 
-`trash` sends the message to the account's Trash mailbox: the optional `trash` mapping, otherwise the mailbox the server advertises with `\Trash`. On Gmail (detected by the `X-GM-EXT-1` capability), `move` and `trash` copy the message and remove its `\Inbox` label instead of using `\Deleted` and `EXPUNGE`. `delete` keeps the `\Deleted` plus `EXPUNGE` behavior on every provider. See [ADR 006](decisions/006-gmail-move-and-trash-semantics.md).
+`trash` sends the message to the account's Trash mailbox: the optional `trash` mapping, otherwise the mailbox the server advertises with `\Trash`. On Gmail (detected by the `X-GM-EXT-1` capability), `move` and `trash` use `UID MOVE` instead of `\Deleted` and `EXPUNGE`. `delete` keeps the `\Deleted` plus `EXPUNGE` behavior on every provider. See [ADR 006](decisions/006-gmail-move-and-trash-semantics.md).
 
 If a rule matches with only `mark_read`, the message is marked read and stays in `INBOX`. If it has no action at all, the message is left unchanged.
 

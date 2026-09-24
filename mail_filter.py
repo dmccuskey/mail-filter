@@ -59,11 +59,10 @@ def ensure_folders_exist(imap, account_id, folder_map):
     imap.select("INBOX")
 
 
-def detect_gmail(imap):
+def server_capabilities(imap):
     """
-    Return True if the server advertises Gmail's X-GM-EXT-1 capability,
-    False if it does not, or None if the capability query failed.
-    None means the provider is unknown; callers must not assume generic IMAP.
+    Return the server's capabilities as a set of uppercase bytes tokens,
+    or None if the capability query failed.
     """
     try:
         status, data = imap.capability()
@@ -75,7 +74,17 @@ def detect_gmail(imap):
     if isinstance(line, str):
         line = line.encode("ascii", errors="ignore")
     # imaplib returns the capabilities as one space-separated line
-    return b"X-GM-EXT-1" in line.upper().split()
+    return set(line.upper().split())
+
+
+def detect_gmail(imap):
+    """
+    Return True if the server advertises Gmail's X-GM-EXT-1 capability,
+    False if it does not, or None if the capability query failed.
+    None means the provider is unknown; callers must not assume generic IMAP.
+    """
+    capabilities = server_capabilities(imap)
+    return None if capabilities is None else b"X-GM-EXT-1" in capabilities
 
 
 # A LIST response line as imaplib returns it (no "* LIST" prefix):
@@ -528,25 +537,25 @@ def move_message(imap, uid, mailbox, destination, is_gmail, mark_read):
 
     extras, read_note = apply_mark_read(imap, uid) if mark_read else ("", "")
 
+    if is_gmail:
+        # Gmail folders are labels. UID MOVE adds the destination label and
+        # removes \\Inbox in one step, keeping other labels; no \\Deleted, no
+        # EXPUNGE. (-X-GM-LABELS (\\Inbox) with INBOX selected is accepted but
+        # ignored; see ADR 006.) On failure the message stays in INBOX.
+        status, _ = imap.uid("MOVE", uid, f'"{mailbox}"')
+        if status != "OK":
+            return (
+                f"FAILED: move to '{mailbox}' refused (status={status}); "
+                f"left in INBOX{read_note}"
+            ), False
+        return f"→ {destination}{extras}", False
+
     status, _ = imap.uid("COPY", uid, f'"{mailbox}"')
     if status != "OK":
         return (
             f"FAILED: copy to '{mailbox}' refused (status={status}); "
             f"left in INBOX{read_note}"
         ), False
-
-    if is_gmail:
-        # Gmail folders are labels: COPY added the destination label;
-        # removing \\Inbox takes the message out of INBOX while keeping
-        # its other labels. No \\Deleted, no EXPUNGE. On failure the
-        # message stays in INBOX; never fall back to \\Deleted.
-        status, _ = imap.uid("STORE", uid, "-X-GM-LABELS", r"(\Inbox)")
-        if status != "OK":
-            return (
-                f"FAILED: \\Inbox label not removed (status={status}); "
-                f"copied to '{mailbox}', still in INBOX{read_note}"
-            ), False
-        return f"→ {destination}{extras}", False
 
     # Generic IMAP move: mark source for removal and expunge once
     # after processing all messages.
@@ -603,7 +612,8 @@ def process_account(account_cfg, folders_for_account, rules_cfg, test_run_id=Non
     # Gmail moves messages by label, so move/trash need to know the provider.
     # None (query failed) blocks move/trash rather than risking generic
     # \Deleted + EXPUNGE semantics on Gmail.
-    is_gmail = detect_gmail(imap)
+    capabilities = server_capabilities(imap)
+    is_gmail = None if capabilities is None else b"X-GM-EXT-1" in capabilities
     if is_gmail is None:
         log(
             f"[{account_id}] ERROR: capability query failed; "
@@ -611,6 +621,13 @@ def process_account(account_cfg, folders_for_account, rules_cfg, test_run_id=Non
         )
     elif is_gmail:
         log(f"[{account_id}] Gmail IMAP extensions detected (X-GM-EXT-1)")
+        if b"MOVE" not in capabilities:
+            log(
+                f"[{account_id}] ERROR: Gmail server does not advertise MOVE; "
+                "move and trash actions will be skipped"
+            )
+    # Gmail moves need MOVE; never fall back to another removal method
+    gmail_without_move = bool(is_gmail) and b"MOVE" not in capabilities
 
     # Check folder existence
     ensure_folders_exist(imap, account_id, folders_for_account)
@@ -720,6 +737,8 @@ def process_account(account_cfg, folders_for_account, rules_cfg, test_run_id=Non
                 outcome = f"SKIPPED: {problem}"
             elif is_gmail is None:
                 outcome = "SKIPPED: provider unknown (capability query failed)"
+            elif gmail_without_move:
+                outcome = "SKIPPED: Gmail server does not advertise MOVE"
             else:
                 destination = f"Trash ({target_mailbox})" if trash_flag else target_mailbox
                 outcome, expunge = move_message(

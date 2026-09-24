@@ -91,7 +91,7 @@ is removed from the source INBOX
 
 with the expected Gmail label behavior.
 
-On Gmail, `move` and `trash` copy the message (adding the destination label) and remove the `\Inbox` label with `X-GM-LABELS`, without relying on Gmail's configurable expunge behavior. Generic IMAP accounts keep COPY, `\Deleted`, and EXPUNGE.
+On Gmail, `move` and `trash` use `UID MOVE`, which adds the destination label and removes `\Inbox` in one step, without relying on Gmail's configurable expunge behavior. (Removing `\Inbox` with `X-GM-LABELS` while `INBOX` is selected looks successful but does nothing; see the ADR 006 amendment.) Generic IMAP accounts keep COPY, `\Deleted`, and EXPUNGE.
 
 Do not assume that behavior which is correct for Gmail is harmless on every other IMAP server.
 

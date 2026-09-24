@@ -264,13 +264,12 @@ with the expunge occurring after the account's message-processing loop.
 On Gmail, the move is performed as:
 
 ```text
-UID COPY (adds the destination label)
-UID STORE -X-GM-LABELS (\Inbox)
+UID MOVE (adds the destination label and removes \Inbox)
 ```
 
 Gmail moves do not mark the message `\Deleted` or issue `EXPUNGE`, and the message keeps its other labels.
 
-If the server's capabilities cannot be read, the provider is unknown and the move is skipped (see [ADR 006](decisions/006-gmail-move-and-trash-semantics.md)).
+If the server's capabilities cannot be read, the provider is unknown and the move is skipped. It is also skipped on a Gmail server that does not advertise `MOVE` (see [ADR 006](decisions/006-gmail-move-and-trash-semantics.md)).
 
 ### `trash`
 
@@ -288,7 +287,7 @@ Example:
 
 On a generic IMAP server, `trash` is performed like `move` to the Trash mailbox (copy, `\Deleted`, expunge).
 
-On Gmail, the message is copied to the Trash mailbox and its `\Inbox` label is removed, without `\Deleted` or `EXPUNGE`. Gmail then applies its own Trash behavior, including permanent removal after 30 days.
+On Gmail, the message is moved to the Trash mailbox with `UID MOVE`, without `\Deleted` or `EXPUNGE`. Gmail then applies its own Trash behavior, including permanent removal after 30 days.
 
 `trash` is not the same as `delete`: on Gmail, `delete` usually archives the message rather than trashing it.
 

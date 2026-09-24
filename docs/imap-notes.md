@@ -52,11 +52,12 @@ This is the known-good baseline for non-Gmail servers, and it is also how `trash
 For Gmail, the move is:
 
 ```text
-UID COPY message → target mailbox   (adds the label)
-UID STORE original -X-GM-LABELS (\Inbox)
+UID MOVE message → target mailbox   (adds the label, removes \Inbox)
 ```
 
 This avoids marking the message `\Deleted` and avoids `EXPUNGE`. Other Gmail labels remain attached.
+
+Do not remove `\Inbox` with `UID STORE -X-GM-LABELS (\Inbox)` while `INBOX` is selected: Gmail answers `OK` but leaves the label in place. Its `X-GM-LABELS` replies also omit the selected mailbox's own label, so the reply looks like success. Check labels from `[Gmail]/All Mail`, which shows all of them. See the [ADR 006 amendment](decisions/006-gmail-move-and-trash-semantics.md#amendment-gmail-uses-uid-move).
 
 ## Gmail
 
@@ -76,11 +77,11 @@ Gmail interprets `\Deleted` and `EXPUNGE` through two account settings:
 - Auto-Expunge: when on, `\Deleted` expunges the message from the selected folder immediately, during the processing loop.
 - The disposition of a message expunged from its last visible folder: archive (default), move to Trash, or delete forever.
 
-The `trash` action copies the message to the Trash mailbox (for example `[Gmail]/Trash`) and removes `\Inbox`. Gmail purges Trash after 30 days.
+The `trash` action moves the message to the Trash mailbox (for example `[Gmail]/Trash`) with `UID MOVE`. Gmail purges Trash after 30 days.
 
 The `delete` action keeps the generic `\Deleted` plus `EXPUNGE` semantics, so on Gmail it usually archives the message.
 
-If the `CAPABILITY` query fails, the provider is unknown and `move` and `trash` are skipped rather than processed with generic semantics.
+If the `CAPABILITY` query fails, the provider is unknown and `move` and `trash` are skipped rather than processed with generic semantics. They are also skipped on a Gmail server that does not advertise `MOVE`.
 
 ## Trash Mailbox Discovery
 
