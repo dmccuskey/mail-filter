@@ -95,23 +95,68 @@ On Gmail, `move` and `trash` use `UID MOVE`, which adds the destination label an
 
 Do not assume that behavior which is correct for Gmail is harmless on every other IMAP server.
 
-## Testing Strategy
+## Testing
 
-Unit tests use only the standard library and a fake IMAP connection (no network or credentials):
+Testing has two halves:
+
+- **Unit tests** (`tests/test_mail_filter.py`) check rule matching, configuration checks, and the exact IMAP commands sent, using a fake IMAP connection. They use only the standard library and need no network or credentials.
+- **Live IMAP tests** (`tests/test_live_imap.py`, run with `imap_tests.py`) run the real filter against real servers, to check that each server does what those commands are meant to do.
+
+### Unit Tests
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
+Run them after every change. They report the live tests as skipped; `unittest discover` never contacts a server.
+
+### Live IMAP Tests
+
+```bash
+python3 imap_tests.py                    # every account with test_enabled
+python3 imap_tests.py gmail-main         # only the accounts named
+python3 imap_tests.py --keep gmail-main  # leave the results on the server to inspect
+```
+
+The tests use the accounts in `accounts.local.json5`. Every account is tested unless it sets `"test_enabled": false` (see [`test_enabled`](configuration.md#test_enabled)); `mail_enabled` does not matter, so an account kept only for testing can set `"mail_enabled": false`. The rules and folders files are not used: the tests bring their own rules. Source the secrets file first if accounts use `password_env`.
+
+**Gmail setup.** In Gmail, open Settings → Labels and check "Show in IMAP" for **All Mail** and **Trash**:
+
+- Without All Mail, the tests cannot check a moved message's labels, and cleanup cannot find messages that have left `INBOX` (on Gmail, a deleted message usually only loses its `\Inbox` label and stays in All Mail). Those messages are left behind with a warning.
+- Without Trash, the Trash test is skipped. Cleanup cannot delete anything either, because Gmail deletes permanently only from Trash.
+
+The Settings → Forwarding and POP/IMAP choice for deleted messages (archive, move to Trash, or delete forever) does not matter. The delete test only checks that the message left `INBOX`, and cleanup looks in both All Mail and Trash.
+
+For each account, the tests:
+
+1. create the folders `mail-filter-live-tests/moved` and `mail-filter-live-tests/alt-trash` (with the server's own delimiter and prefix, for example `INBOX.mail-filter-live-tests.moved`), if they do not already exist;
+2. add unread test messages to `INBOX` with IMAP `APPEND`, one per case, each with its own sender, name, recipient, and subject;
+3. run the filter on just those messages and check each message's log line, where it ended up, its `\Seen` flag, and, on Gmail, its labels: move, move with `mark_read`, trash to the server's `\Trash` and to a `trash` mapping, delete, `mark_read` alone, a rule with no action, no matching rule, a missing folder mapping, a missing mailbox, MIME-encoded sender names, a dry run, and a normal run that must ignore test messages;
+4. permanently delete the test messages (on Gmail, through Trash), then delete the `mail-filter-live-tests` folders if they are empty.
+
+Test messages have a subject starting `[mail-filter testing only]`, an `X-Mail-Filter-Test` header holding the run's ID, and a `Message-ID` ending `@mail-filter.invalid`. The tests change or delete a message only after reading that header, and delete only their own empty `mail-filter-live-tests` folders, so real mail and your other folders are never touched. A normal filter run logs test messages as `IGNORED` and leaves them alone, so a cron run cannot interfere with a test in progress. See [ADR 008](decisions/008-live-imap-tests.md).
+
+Test messages appear briefly in the tested accounts; a mail client may notify you of them.
+
+After the tests, each account prints either `Cleaning up test run <id>: ...` followed by `Cleanup done: deleted <n> test message(s); deleted folders: ...`, or, with `--keep`, `Keeping test run <id>: ...` with the test folders left in place. A run that removes leftovers from earlier runs also prints `Removed <n> test message(s) left by earlier runs`. Anything the tests could not clean up is printed as a `Warning:` line. A failed test shows its own filter log line and, when a message is in the wrong place, its flags and Gmail labels; the filter's full log for the run is in `imap_tests.log` (gitignored).
+
+`--keep` skips the cleanup, so the messages and folders can be inspected in a mail client. Afterward:
+
+- **Messages** are removed by the first run that starts more than an hour after the kept run did. Each run begins by sweeping test messages from runs that started more than an hour earlier. The hour protects a run that is still in progress on another machine. The same sweep removes messages a crashed run left behind. To remove them sooner, delete them by hand.
+- **Folders** are deleted at the end of the first later run that finds them empty, which is normally the same run that sweeps the messages. Until then, a run leaves the folders in place and prints a `kept folder ... not empty` warning.
+
+If a server fails the live tests, set `"test_enabled": false` for that account and open a GitHub issue with the `imap_tests.py` output (remove any addresses you do not want to share).
+
+### Behavior Changes
+
 For changes affecting message identity or deletion:
 
 1. Start from the known-good baseline.
 2. Commit before modifying behavior.
-3. Test with `DRY_RUN` where applicable.
-4. Test non-destructive operations first.
-5. Verify behavior on the existing non-Gmail account(s).
-6. Verify Gmail independently: destination label added, `\Inbox` removed, other labels kept, no `\Deleted` flag, and Trash behavior for `trash`.
-7. Commit after successful verification.
+3. Run the unit tests.
+4. Run `python3 imap_tests.py` against a Gmail account and a non-Gmail account.
+5. Test with `DRY_RUN` on the real rules where applicable.
+6. Commit after successful verification.
 
 ## Development Checkpoints
 

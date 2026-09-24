@@ -18,6 +18,7 @@ Mail Filter connects to one or more IMAP accounts, evaluates unseen messages aga
 - Move, delete, and mark-read actions
 - Optional catch-all routing
 - Dry-run support
+- Live IMAP tests against your own servers (`imap_tests.py`)
 - Raspberry Pi / cron deployment
 
 ## Project Structure
@@ -26,6 +27,7 @@ Mail Filter connects to one or more IMAP accounts, evaluates unseen messages aga
 mail-filter/
 ├── mail_filter.py
 ├── list_folders.py
+├── imap_tests.py             # live IMAP tests
 ├── accounts.example.json5
 ├── accounts.local.json5      # you create (gitignored)
 ├── folders.example.json5
@@ -42,7 +44,8 @@ mail-filter/
 │   └── decisions/
 │       └── <project ADRs>
 ├── tests/
-│   └── test_mail_filter.py
+│   ├── test_mail_filter.py
+│   └── test_live_imap.py
 └── README.md
 ```
 
@@ -82,7 +85,7 @@ Current IMAP behavior, Gmail considerations, EXPUNGE, sequence numbers, and UID 
 
 [docs/development.md](docs/development.md)
 
-Development checkpoints, planned changes, the completed UID migration, and the roadmap for Gmail handling.
+Development checkpoints, planned changes, the completed UID migration, the roadmap for Gmail handling, and [testing](docs/development.md#testing): offline unit tests and live IMAP tests against your own servers.
 
 ## Current Status
 
