@@ -158,6 +158,28 @@ For changes affecting message identity or deletion:
 5. Test with `DRY_RUN` on the real rules where applicable.
 6. Commit after successful verification.
 
+## Branches
+
+`main` holds only code that has passed testing, because the Raspberry Pi deployment pulls `main` and runs it against real mail.
+
+Each change is developed on its own short-lived branch, named for the change:
+
+```text
+feat/<name>    new behavior
+fix/<name>     bug fixes
+docs/<name>    documentation only
+```
+
+Workflow:
+
+1. Branch from an up-to-date `main`: `git switch main && git pull && git switch -c fix/<name>`.
+2. Commit on the branch as often as useful; small commits are still preferred (see [Development Philosophy](#development-philosophy)).
+3. Before merging, run the unit tests. If the change touches IMAP behavior, also run `python3 imap_tests.py` on a Gmail account and a non-Gmail account (see [Testing](#testing)). Documentation-only changes need neither.
+4. Merge into `main` with a GitHub pull request or `git merge`, push, and delete the branch.
+5. Update the deployment: `git pull` in `/home/pi/mail-filter`.
+
+A branch holds one change. Unrelated changes go on separate branches, so each can be tested, merged, and reverted on its own.
+
 ## Development Checkpoints
 
 Recommended sequence:
