@@ -74,7 +74,7 @@ Left open when the live IMAP tests were added ([issue #1](https://github.com/dmc
   - or, closer to real mail, a gitignored folder of `.eml` files (for example dragged out of Apple Mail), which also tests header parsing on what senders actually send: `To` headers without your address, MIME-encoded subjects and names, folded headers;
   - the `.eml` version needs header parsing (recipients, decoded subject, sender name and address) moved out of `process_account()` into a helper.
 - Gmail: a live check that a moved message keeps its other labels ([issue #2](https://github.com/dmccuskey/mail-filter/issues/2))
-- Dovecot in Docker (with a `\Trash` special-use mailbox), so generic IMAP can be tested without an account, possibly in GitHub Actions
+- Dovecot in Docker: run the generic IMAP live tests against a throwaway server, without an account, and in GitHub Actions on every push. A default Dovecot adds little over a real Dovecot account; the value is in server setups that real accounts rarely offer and nothing tests live today: no `UIDPLUS`, no `\Trash` special-use mailbox, `/` as the delimiter without an `INBOX.` prefix, no `MOVE`. Worth building when the filter is used on such servers (for example, after a bug report from one). Needs an `imap_port` setting and handling of the container's self-signed certificate, since the filter always connects with `IMAP4_SSL` on port 993.
 
 ## UID Migration
 
