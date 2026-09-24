@@ -5,6 +5,8 @@ Run the live IMAP tests against real servers (see docs/development.md#testing).
   python3 imap_tests.py                   every account with test_enabled
   python3 imap_tests.py gmail-main        only the accounts named
   python3 imap_tests.py --keep gmail-main leave test messages and folders in place
+  python3 imap_tests.py --record          also save the filter's IMAP replies to
+                                          tests/fixtures/imap/ for offline replay
 
 The tests create messages marked "[mail-filter testing only]" in each tested
 account's INBOX, run the filter on them, and then delete what they created.
@@ -24,11 +26,14 @@ def main():
                         help="accounts to test (default: every account with test_enabled)")
     parser.add_argument("--keep", action="store_true",
                         help="leave test messages and folders on the server for inspection")
+    parser.add_argument("--record", action="store_true",
+                        help="save the filter's scrubbed IMAP replies to tests/fixtures/imap/")
     args = parser.parse_args()
 
     # The live test module reads these when it is imported
     os.environ["MAILFILTER_LIVE_TESTS"] = "1"
     os.environ["MAILFILTER_LIVE_KEEP"] = "1" if args.keep else ""
+    os.environ["MAILFILTER_LIVE_RECORD"] = "1" if args.record else ""
     os.environ["MAILFILTER_LIVE_ACCOUNTS"] = ",".join(args.accounts)
 
     sys.path.insert(0, str(BASE / "tests"))

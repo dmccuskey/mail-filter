@@ -32,11 +32,14 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import mail_filter  # noqa: E402
+import imap_recording  # noqa: E402
 
 LIVE = os.environ.get("MAILFILTER_LIVE_TESTS") == "1"
 KEEP = os.environ.get("MAILFILTER_LIVE_KEEP") == "1"
+RECORD = os.environ.get("MAILFILTER_LIVE_RECORD") == "1"
 ACCOUNTS_ENV = "MAILFILTER_LIVE_ACCOUNTS"  # comma-separated IDs; empty means all
 
 BASE = Path(mail_filter.__file__).resolve().parent
@@ -46,6 +49,8 @@ SWEEP_QUERY = "mail-filter testing only"  # the marker's words; brackets upset G
 WAIT_SECONDS = 15  # Gmail's search can lag behind APPEND and moves
 STALE_AFTER = timedelta(hours=1)  # older runs' leftovers are swept at startup
 LOG_FILE = BASE / "imap_tests.log"  # the filter's full output; imap_tests.py empties it
+FIXTURES = BASE / "tests" / "fixtures" / "imap"  # recordings; see imap_recording.py
+RECORDED_THIS_RUN = set()  # recording names already written by this run
 
 Found = namedtuple("Found", "uid test_id flags labels")
 
@@ -372,6 +377,11 @@ class LiveAccountMixin:
         if server.exists(cls.missing):
             raise AssertionError(f"'{cls.missing}' exists; the nofolder case needs it missing")
 
+        cls.recording = []
+        cls.scrubber = imap_recording.Scrubber(
+            cls.CFG["username"], cls.CFG["imap_host"], cls.ACCOUNT_ID,
+            keep_prefixes=[server.folder(None)])
+
         account = {"id": cls.ACCOUNT_ID, **cls.CFG}
         folders = {"moved": cls.moved, "missing": cls.missing}
         cls.run_batch("a", account, folders)
@@ -379,6 +389,25 @@ class LiveAccountMixin:
         with mock.patch.object(mail_filter, "DRY_RUN", True):
             cls.run_batch("c", account, {"moved": cls.moved})
         cls.run_batch("d", account, {"moved": cls.moved}, normal_run=True)
+        if RECORD:
+            cls.write_recording()
+
+    @classmethod
+    def write_recording(cls):
+        """Save the filter's scrubbed IMAP conversations for offline replay."""
+        name = "gmail" if cls.server.is_gmail else "imap"
+        number = 2
+        while name in RECORDED_THIS_RUN:  # two accounts of the same kind
+            name = f"{name.split('-')[0]}-{number}"
+            number += 1
+        RECORDED_THIS_RUN.add(name)
+        path = FIXTURES / f"{name}.txt"
+        imap_recording.write_recording(path, name, cls.recording)
+        exchanges = sum(len(batch["exchanges"]) for batch in cls.recording)
+        shown = path.relative_to(BASE) if BASE in path.parents else path
+        cls.say(f"Recorded {exchanges} IMAP exchanges to {shown} "
+                f"({len(cls.scrubber.renamed)} mailbox name(s) replaced); "
+                "review it before committing")
 
     @classmethod
     def cleanup(cls):
@@ -443,17 +472,28 @@ class LiveAccountMixin:
             rules["catch_all"] = {"move": "moved"}
 
         cls.wait_for_inbox(batch_id, len(BATCHES[batch]))
+        # A normal run (no test run ID) must ignore test messages. Narrow its
+        # search to this batch so no real mail is ever fetched.
+        imap_class = narrowed_imap(batch_id) if normal_run else imaplib.IMAP4_SSL
+        recorder = imap_recording.Recorder(cls.scrubber)
+        if RECORD:
+            # Records what the filter sends, above the narrowing
+            imap_class = recorder.imap_class(imap_class)
+        test_run_id = None if normal_run else batch_id
         out = io.StringIO()
-        with redirect_stdout(out):
-            if normal_run:
-                # A normal run (no test run ID) must ignore test messages. Narrow
-                # its search to this batch so no real mail is ever fetched.
-                with mock.patch.object(mail_filter.imaplib, "IMAP4_SSL",
-                                       narrowed_imap(batch_id)):
-                    mail_filter.process_account(account, folders, rules)
-            else:
-                mail_filter.process_account(account, folders, rules, test_run_id=batch_id)
+        with redirect_stdout(out), \
+                mock.patch.object(mail_filter.imaplib, "IMAP4_SSL", imap_class):
+            mail_filter.process_account(account, folders, rules, test_run_id=test_run_id)
         cls.logs[batch] = [line.split("] ", 1)[-1] for line in out.getvalue().splitlines()]
+        cls.recording.append({
+            "batch": batch,
+            "test_run_id": test_run_id,
+            "dry_run": mail_filter.DRY_RUN,
+            "folders": folders,
+            "rules": rules,
+            "log": [cls.scrubber.log_line(line) for line in out.getvalue().splitlines()],
+            "exchanges": recorder.exchanges,
+        })
         with open(LOG_FILE, "a") as log_file:
             log_file.write(f"# {cls.ACCOUNT_ID} batch {batch} ({batch_id})\n{out.getvalue()}")
 

@@ -45,7 +45,10 @@ mail-filter/
 │       └── <project ADRs>
 ├── tests/
 │   ├── test_mail_filter.py
-│   └── test_live_imap.py
+│   ├── test_live_imap.py
+│   ├── test_recorded_imap.py     # replays recorded server replies
+│   ├── imap_recording.py
+│   └── fixtures/imap/            # recordings (imap_tests.py --record)
 └── README.md
 ```
 

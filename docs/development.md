@@ -102,6 +102,8 @@ Testing has two halves:
 - **Unit tests** (`tests/test_mail_filter.py`) check rule matching, configuration checks, and the exact IMAP commands sent, using a fake IMAP connection. They use only the standard library and need no network or credentials.
 - **Live IMAP tests** (`tests/test_live_imap.py`, run with `imap_tests.py`) run the real filter against real servers, to check that each server does what those commands are meant to do.
 
+Between the two, **recorded IMAP replies** (`tests/test_recorded_imap.py`) replay conversations saved from real servers during a live run, offline, as part of the unit tests.
+
 ### Unit Tests
 
 ```bash
@@ -146,6 +148,26 @@ After the tests, each account prints either `Cleaning up test run <id>: ...` fol
 - **Folders** are deleted at the end of the first later run that finds them empty, which is normally the same run that sweeps the messages. Until then, a run leaves the folders in place and prints a `kept folder ... not empty` warning.
 
 If a server fails the live tests, set `"test_enabled": false` for that account and open a GitHub issue with the `imap_tests.py` output (remove any addresses you do not want to share).
+
+### Recorded IMAP Replies
+
+A hand-written fake server returns exactly the replies the code expects, so it cannot catch a wrong assumption about what real servers send. Recordings catch those. For example, a server may add an unsolicited flag update to a FETCH reply, or Gmail may answer `UID MOVE` with an empty reply.
+
+```bash
+python3 imap_tests.py --record
+```
+
+This runs the live tests as usual and also saves the filter's own IMAP conversation for each account. Each command it sent is saved with the reply `imaplib` returned. The file is `tests/fixtures/imap/gmail.txt` for Gmail and `tests/fixtures/imap/imap.txt` for other servers; a second account of the same kind gets `imap-2.txt`, and so on. An existing recording is overwritten.
+
+`python3 -m unittest discover tests` replays every recording. It runs `process_account` against the recorded replies and requires exactly the log lines the live run produced. Replies are looked up by the exact command, not by position, so reordering commands does not break a recording. A new or changed command fails with `IMAP command not in the recording`. When that is intended, run `imap_tests.py --record` again and commit the new recordings with the change.
+
+Recordings are committed to the public repository, so they are scrubbed as they are written:
+
+- the password is never recorded (login is not recorded);
+- the account's username and IMAP host become `user@example.com` and `imap.example.com`, and the account ID becomes `test`;
+- in `LIST` replies, every mailbox except `INBOX`, special-use mailboxes (`\Trash`, `\All`, `\Sent`, `\Junk`, `\Drafts`, ...), and the test folders is renamed `Folder-1`, `Folder-2`, and so on.
+
+The filter fetches only the test messages, so no real message content is recorded. Still, read a new recording before committing it; the recording run prints how many mailbox names it replaced.
 
 ### Behavior Changes
 
