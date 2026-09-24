@@ -657,7 +657,8 @@ class DetectGmailTests(unittest.TestCase):
 def message_lines(output):
     """Per-message log lines with the timestamp removed."""
     lines = [line.split("] ", 1)[1] for line in output.splitlines()]
-    return [line for line in lines if " MATCHED #" in line or " NO_RULE #" in line]
+    return [line for line in lines
+            if any(f" {result} #" in line for result in ("MATCHED", "NO_RULE", "IGNORED"))]
 
 
 class LogFormatTests(unittest.TestCase):
@@ -1303,6 +1304,70 @@ class MailEnabledTests(unittest.TestCase):
                     "ERROR: account 'bad' has an invalid \"mail_enabled\"; "
                     "it must be true or false", out)
                 self.assertIn("ERROR: configuration format problem(s); no mail processed", out)
+
+
+class TestMessageTests(unittest.TestCase):
+    """Messages made by the live IMAP tests belong only to their own test run."""
+
+    RULES = {"rules": [], "catch_all": {"move": "archive"}}
+
+    def messages(self):
+        return {
+            b"1": raw_message(subject="real mail"),
+            b"2": raw_message(subject="[mail-filter testing only] run1 move",
+                              headers=[("X-Mail-Filter-Test", "run1")]),
+            b"3": raw_message(subject="[mail-filter testing only] run0 move",
+                              headers=[("X-Mail-Filter-Test", "run0")]),
+        }
+
+    def run_account(self, test_run_id):
+        fake = FakeIMAP(self.messages())
+        with mock.patch.object(mail_filter.imaplib, "IMAP4_SSL", fake), \
+                redirect_stdout(io.StringIO()) as out:
+            mail_filter.process_account(ACCOUNT, FOLDERS, self.RULES, test_run_id)
+        return fake, message_lines(out.getvalue())
+
+    def test_normal_run_ignores_test_messages(self):
+        fake, lines = self.run_account(None)
+        self.assertEqual(lines, [
+            "[test] MATCHED #1 RULE='<catch_all>' SUBJECT='real mail' → Archive",
+            "[test] IGNORED #2 SUBJECT='[mail-filter testing only] run1 move'",
+            "[test] IGNORED #3 SUBJECT='[mail-filter testing only] run0 move'",
+        ])
+        self.assertEqual([c[2] for c in fake.message_calls()], [b"1", b"1"])
+        self.assertIn(("UID", "SEARCH", "UNSEEN"), fake.calls)
+
+    def test_test_run_searches_and_acts_on_only_its_own_messages(self):
+        fake, lines = self.run_account("run1")
+        self.assertIn(("UID", "SEARCH", "UNSEEN", "SUBJECT", '"run1"'), fake.calls)
+        self.assertEqual(lines, [
+            "[test] IGNORED #1 SUBJECT='real mail'",
+            "[test] MATCHED #2 RULE='<catch_all>' SUBJECT='[mail-filter testing only] run1 move'"
+            " → Archive",
+            "[test] IGNORED #3 SUBJECT='[mail-filter testing only] run0 move'",
+        ])
+        self.assertEqual([c[2] for c in fake.message_calls()], [b"2", b"2"])
+
+
+class TestEnabledTests(unittest.TestCase):
+    """test_enabled selects the accounts for the live IMAP tests; the filter ignores it."""
+
+    def test_default_and_values(self):
+        self.assertTrue(mail_filter.test_enabled(ACCOUNT_CFG))
+        self.assertTrue(mail_filter.test_enabled({**ACCOUNT_CFG, "test_enabled": True}))
+        self.assertFalse(mail_filter.test_enabled({**ACCOUNT_CFG, "test_enabled": False}))
+
+    def test_non_boolean_rejected(self):
+        self.assertEqual(
+            mail_filter.validate_config_format(
+                {"t": {**ACCOUNT_CFG, "test_enabled": "no"}}, {}),
+            ["account 't' has an invalid \"test_enabled\"; it must be true or false"])
+
+    def test_filter_run_ignores_test_enabled(self):
+        runner = MailEnabledTests()
+        code, _, process = runner.run_main({"a": {**ACCOUNT_CFG, "test_enabled": False}})
+        self.assertIsNone(code)
+        self.assertEqual(process.call_count, 1)
 
 
 if __name__ == "__main__":

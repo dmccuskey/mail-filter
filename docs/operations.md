@@ -123,10 +123,11 @@ Every processed message produces exactly one line, written after its outcome is 
 ```text
 [timestamp] [account] MATCHED #uid RULE='rule name' SUBJECT='subject' <outcome><extras>
 [timestamp] [account] NO_RULE #uid SUBJECT='subject'
+[timestamp] [account] IGNORED #uid SUBJECT='subject'
 ```
 
 - `[...]` is used only for the timestamp and the account ID.
-- `MATCHED` means a rule, or `catch_all` (`RULE='<catch_all>'`), matched. `NO_RULE` means nothing matched and there is no catch-all.
+- `MATCHED` means a rule, or `catch_all` (`RULE='<catch_all>'`), matched. `NO_RULE` means nothing matched and there is no catch-all. `IGNORED` means the message was made by the live IMAP tests (it has an `X-Mail-Filter-Test` header), so no rule was evaluated and the message is unchanged; see [Testing](development.md#testing).
 - `#uid` is the message's IMAP UID. A UID is unique only within one account's mailbox, so combine it with the account when searching across accounts.
 - `RULE` and `SUBJECT` are printed as-is; quotes inside them are not escaped.
 
@@ -181,6 +182,7 @@ Useful searches:
 ```bash
 grep MATCHED mail_filter.log              # every match
 grep NO_RULE mail_filter.log              # unmatched messages
+grep IGNORED mail_filter.log              # live-test messages left alone
 grep -E 'FAILED|ERROR' mail_filter.log    # anything that needs attention
 grep 'SKIPPED' mail_filter.log            # matches that could not be acted on
 grep "RULE='GitHub mail'" mail_filter.log # one rule

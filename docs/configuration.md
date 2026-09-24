@@ -43,6 +43,7 @@ accounts.local.json5
    ├─ imap_host      string
    ├─ username       string
    ├─ mail_enabled   boolean   optional, default true
+   ├─ test_enabled   boolean   optional, default true
    └─ one of:
       ├─ password       string   the password itself
       └─ password_env   string   name of an environment variable holding it
@@ -110,6 +111,10 @@ Optional; defaults to `true`. Set it to `false` to skip the account without remo
 ```
 
 The value must be `true` or `false`. Anything else, including the string `"false"`, is rejected at startup: the filter logs an `ERROR`, processes no mail, and exits with status 1.
+
+#### `test_enabled`
+
+Optional; defaults to `true`. Set it to `false` to leave the account out of the live IMAP tests (`imap_tests.py`), which create and remove test messages on the server; see [Testing](development.md#testing). The filter itself ignores this setting, and it is independent of `mail_enabled`: an account used only for testing can set `"mail_enabled": false`, and a personal account can set `"test_enabled": false`. Like `mail_enabled`, the value must be `true` or `false`.
 
 ## Folder Mapping
 

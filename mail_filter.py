@@ -18,6 +18,11 @@ except ImportError:
 DRY_RUN = False  # set to False after you're happy with behavior
 DEV_LOGS = False
 
+# Messages created by the live IMAP tests (imap_tests.py) carry this header,
+# holding the test run ID, and this marker at the start of the subject.
+TEST_HEADER = "X-Mail-Filter-Test"
+TEST_SUBJECT_MARKER = "[mail-filter testing only]"
+
 
 # ---------- Helpers ----------
 
@@ -258,10 +263,12 @@ def validate_config_format(accounts_all, folders_all):
                 problems.append(
                     f"account '{account_id}' in accounts.local.json5 must be an object"
                 )
-            elif not isinstance(cfg.get("mail_enabled", True), bool):
-                problems.append(
-                    f"account '{account_id}' has an invalid \"mail_enabled\"; "
+            else:
+                problems.extend(
+                    f"account '{account_id}' has an invalid \"{setting}\"; "
                     "it must be true or false"
+                    for setting in ("mail_enabled", "test_enabled")
+                    if not isinstance(cfg.get(setting, True), bool)
                 )
 
     if "folders" in folders_all and "folders" not in accounts_all:
@@ -275,6 +282,11 @@ def validate_config_format(accounts_all, folders_all):
 def mail_enabled(cfg):
     """True unless the account sets "mail_enabled": false (the default is true)."""
     return cfg.get("mail_enabled", True)
+
+
+def test_enabled(cfg):
+    """True unless the account sets "test_enabled": false (the default is true)."""
+    return cfg.get("test_enabled", True)
 
 
 def password_problems(account_id, cfg, environ=None):
@@ -465,6 +477,7 @@ def log_message(account_id, result, msg_ref, subject, rule_name=None, outcome=No
     Write the single per-message line (format: docs/operations.md):
       [account] MATCHED #uid RULE='name' SUBJECT='subject' <outcome> [DRY_RUN]
       [account] NO_RULE #uid SUBJECT='subject' [DRY_RUN]
+      [account] IGNORED #uid SUBJECT='subject' [DRY_RUN]
     """
     line = f"[{account_id}] {result} {msg_ref}"
     if rule_name is not None:
@@ -555,7 +568,13 @@ def mark_message_read(imap, uid):
 
 # ---------- Core processing ----------
 
-def process_account(account_cfg, folders_for_account, rules_cfg):
+def process_account(account_cfg, folders_for_account, rules_cfg, test_run_id=None):
+    """
+    Filter the account's unseen INBOX messages.
+
+    A normal run (test_run_id None) ignores messages made by the live IMAP
+    tests. A test run searches for, and acts on, only its own messages.
+    """
     account_id = account_cfg["id"]
     host = account_cfg["imap_host"]
     user = account_cfg["username"]
@@ -595,7 +614,10 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
 
     # Only act on unseen messages so we don't re-process old mail
     # UIDs (not sequence numbers) so message identity survives EXPUNGE
-    status, msgs = imap.uid("SEARCH", "UNSEEN")
+    if test_run_id is None:
+        status, msgs = imap.uid("SEARCH", "UNSEEN")
+    else:
+        status, msgs = imap.uid("SEARCH", "UNSEEN", "SUBJECT", f'"{test_run_id}"')
     if status != "OK":
         log(f"[{account_id}] ERROR: search UNSEEN failed (status={status})")
         imap.logout()
@@ -615,6 +637,12 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
             continue
 
         msg = email.message_from_bytes(data[0][1])
+
+        # Test messages belong only to the test run that created them
+        if msg.get(TEST_HEADER) != test_run_id:
+            subject = decode_mime_header(msg.get("Subject", "") or "")
+            log_message(account_id, "IGNORED", msg_ref, subject)
+            continue
 
         # Recipients (To header only)
         to_addresses = get_to_addresses(msg)
