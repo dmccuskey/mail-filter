@@ -253,11 +253,16 @@ def validate_config_format(accounts_all, folders_all):
             "key each account by its ID instead (see docs/configuration.md)"
         )
     else:
-        problems.extend(
-            f"account '{account_id}' in accounts.local.json5 must be an object"
-            for account_id, cfg in accounts_all.items()
-            if not isinstance(cfg, dict)
-        )
+        for account_id, cfg in accounts_all.items():
+            if not isinstance(cfg, dict):
+                problems.append(
+                    f"account '{account_id}' in accounts.local.json5 must be an object"
+                )
+            elif not isinstance(cfg.get("mail_enabled", True), bool):
+                problems.append(
+                    f"account '{account_id}' has an invalid \"mail_enabled\"; "
+                    "it must be true or false"
+                )
 
     if "folders" in folders_all and "folders" not in accounts_all:
         problems.append(
@@ -265,6 +270,11 @@ def validate_config_format(accounts_all, folders_all):
             "remove the wrapper so accounts are top-level keys (see docs/configuration.md)"
         )
     return problems
+
+
+def mail_enabled(cfg):
+    """True unless the account sets "mail_enabled": false (the default is true)."""
+    return cfg.get("mail_enabled", True)
 
 
 def password_problems(account_id, cfg, environ=None):
@@ -702,8 +712,14 @@ def main():
         log("ERROR: configuration format problem(s); no mail processed")
         sys.exit(1)
 
+    # Disabled accounts are skipped entirely, including the startup checks,
+    # so a broken or half-configured account can be disabled
+    enabled_accounts = {
+        account_id: cfg for account_id, cfg in accounts_all.items() if mail_enabled(cfg)
+    }
+
     # Reject a missing or ambiguous password before connecting to any account
-    password_problem_list = validate_passwords(accounts_all)
+    password_problem_list = validate_passwords(enabled_accounts)
     for problem in password_problem_list:
         log(f"ERROR: {problem}")
     if password_problem_list:
@@ -715,6 +731,8 @@ def main():
     # Reject invalid rules before connecting to any account
     problem_count = 0
     for account in accounts:
+        if not mail_enabled(account):
+            continue
         account_rules = rules_all.get(account["id"])
         for problem in validate_rules(account_rules or {}):
             log(f"[{account['id']}] ERROR: {problem}")
@@ -728,6 +746,10 @@ def main():
 
     for account in accounts:
         account_id = account["id"]
+        if not mail_enabled(account):
+            log(f"[{account_id}] mail_enabled is false; skipping account")
+            continue
+
         account_folders = folders_cfg_all.get(account_id)
         account_rules = rules_all.get(account_id)
 

@@ -3,6 +3,7 @@
   // Set exactly one of "password" (the password itself) or
   // "password_env" (the name of an environment variable holding it).
   // Keep literal passwords only in accounts.local.json5.
+  // Optional "mail_enabled": false skips an account (default true).
   
   "aerospace-account": {
     "imap_host": "premium147.web-hosting.com",
@@ -13,6 +14,7 @@
   "gmail-main": {
     "imap_host": "imap.gmail.com",
     "username": "your-address@gmail.com",
-    "password_env": "MAILFILTER_PW_GMAIL_MAIN"
+    "password_env": "MAILFILTER_PW_GMAIL_MAIN",
+    "mail_enabled": false
   }
 }

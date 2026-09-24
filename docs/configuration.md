@@ -40,8 +40,9 @@ Schema:
 ```text
 accounts.local.json5
 └─ <account id>                 one entry per IMAP account
-   ├─ imap_host   string
-   ├─ username    string
+   ├─ imap_host      string
+   ├─ username       string
+   ├─ mail_enabled   boolean   optional, default true
    └─ one of:
       ├─ password       string   the password itself
       └─ password_env   string   name of an environment variable holding it
@@ -98,7 +99,17 @@ Real credentials belong only in the local configuration.
 
 Name of an environment variable that holds the IMAP password, used instead of `password`. The password then lives outside `accounts.local.json5`, so that file holds no secrets and can be backed up or versioned like the other config files.
 
-Each account sets exactly one of `password` or `password_env`, and accounts can mix the two styles. Before connecting to any account, the filter rejects an account that sets both, sets neither, or names a variable that is unset or empty; it logs one `ERROR` line per problem, processes no mail, and exits with status 1. See [Credentials](operations.md#credentials) for supplying the variable under cron.
+Each account sets exactly one of `password` or `password_env`, and accounts can mix the two styles. Before connecting to any account, the filter rejects an enabled account that sets both, sets neither, or names a variable that is unset or empty; it logs one `ERROR` line per problem, processes no mail, and exits with status 1. See [Credentials](operations.md#credentials) for supplying the variable under cron.
+
+#### `mail_enabled`
+
+Optional; defaults to `true`. Set it to `false` to skip the account without removing its entry. A disabled account is not connected to, and its password and rules are not checked at startup, so an account that is broken or only partly set up can be disabled without stopping the others. Each run logs:
+
+```text
+[2026-09-23 19:24:47] [mentalhijack-account] mail_enabled is false; skipping account
+```
+
+The value must be `true` or `false`. Anything else, including the string `"false"`, is rejected at startup: the filter logs an `ERROR`, processes no mail, and exits with status 1.
 
 ## Folder Mapping
 
@@ -204,7 +215,7 @@ Example:
 }
 ```
 
-The supported match fields are listed in the [Rule Reference](rule-reference.md). Before connecting to any account, the filter checks every account's rules; if any rule uses an unknown match field, has an empty `match`, or has a match field with no values, it logs an error for each problem (naming the account and rule), processes no mail, and exits with status 1. Use `catch_all` to act on every message no rule matches.
+The supported match fields are listed in the [Rule Reference](rule-reference.md). Before connecting to any account, the filter checks every enabled account's rules; if any rule uses an unknown match field, has an empty `match`, or has a match field with no values, it logs an error for each problem (naming the account and rule), processes no mail, and exits with status 1. Use `catch_all` to act on every message no rule matches.
 
 An optional `catch_all` sits in the account next to `rules`, and applies only when no rule matches:
 

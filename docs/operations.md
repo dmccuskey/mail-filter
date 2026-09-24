@@ -18,7 +18,7 @@ On the Raspberry Pi deployment, this is:
 
 ### Startup Rule Check
 
-Before connecting to any account, the filter checks every account's rules for unknown match fields, empty matches, and match fields with no values. If it finds any, it logs one `ERROR` line per problem and a summary line, processes no mail, and exits with status 1:
+Before connecting to any account, the filter checks the rules of every enabled account (accounts with `"mail_enabled": false` are not checked) for unknown match fields, empty matches, and match fields with no values. If it finds any, it logs one `ERROR` line per problem and a summary line, processes no mail, and exits with status 1:
 
 ```text
 [2026-09-23 16:09:44] [gmail-main] ERROR: rule #1 'delete 1800gotjunk to Archive' uses unknown match field 'from_contains'
@@ -161,6 +161,7 @@ Examples:
 Lines that are not about a single matched message keep an account-level form, for example:
 
 ```text
+[2026-09-23 12:21:50] [mentalhijack-account] mail_enabled is false; skipping account
 [2026-09-23 12:21:50] [gmail-main] ERROR: capability query failed; move and trash actions will be skipped
 [2026-09-23 12:21:50] [gmail-main] Trash mailbox: '[Gmail]/Trash' (server \Trash)
 [2026-09-23 12:21:50] [gmail-main] ERROR: fetch #16159 failed (status=NO)
@@ -245,6 +246,8 @@ Cron does not read shell startup files, so source the secrets file in the cron l
 ```cron
 */5 * * * * . /home/pi/.config/mail-filter/secrets.env && /usr/bin/python3 /home/pi/mail-filter/mail_filter.py >> /home/pi/mail-filter/mail_filter.log 2>&1
 ```
+
+The variable of an account with `"mail_enabled": false` is not checked, so it need not be set.
 
 Source the same file before running `mail_filter.py` or `list_folders.py` by hand.
 

@@ -1232,5 +1232,78 @@ class PasswordTests(unittest.TestCase):
         imap.login.assert_called_once_with("u", "secret")
 
 
+class MailEnabledTests(unittest.TestCase):
+    """An account with "mail_enabled": false is skipped, including its startup checks."""
+
+    GOOD_RULES = {"rules": [rule({"to_local_is": ["me"]}, {"move": "shop"})]}
+
+    def run_main(self, accounts, rules=None, environ=None):
+        rules = rules or {}
+        configs = {
+            "accounts.local.json5": accounts,
+            "folders.local.json5": {account_id: FOLDERS for account_id in accounts},
+            "rules.local.json5": {
+                account_id: rules.get(account_id, self.GOOD_RULES) for account_id in accounts
+            },
+        }
+        process = mock.Mock()
+        with mock.patch.object(mail_filter, "load_json", lambda path: configs[Path(path).name]), \
+                mock.patch.object(mail_filter, "process_account", process), \
+                mock.patch.dict(mail_filter.os.environ, environ or {}, clear=True), \
+                redirect_stdout(io.StringIO()) as out:
+            try:
+                mail_filter.main()
+                code = None
+            except SystemExit as exc:
+                code = exc.code
+        return code, out.getvalue(), process
+
+    def processed_ids(self, process):
+        return [c.args[0]["id"] for c in process.call_args_list]
+
+    def test_missing_or_true_is_processed(self):
+        accounts = {"default": ACCOUNT_CFG, "on": {**ACCOUNT_CFG, "mail_enabled": True}}
+        code, out, process = self.run_main(accounts)
+        self.assertIsNone(code)
+        self.assertEqual(self.processed_ids(process), ["default", "on"])
+        self.assertNotIn("skipping account", out)
+
+    def test_false_is_skipped_and_logged(self):
+        accounts = {
+            "a": ACCOUNT_CFG,
+            "off": {**ACCOUNT_CFG, "mail_enabled": False},
+            "b": ACCOUNT_CFG,
+        }
+        code, out, process = self.run_main(accounts)
+        self.assertIsNone(code)
+        self.assertEqual(self.processed_ids(process), ["a", "b"])
+        lines = [line.split("] ", 1)[1] for line in out.splitlines()]
+        self.assertEqual(lines, ["[off] mail_enabled is false; skipping account"])
+
+    def test_disabled_account_is_not_checked_at_startup(self):
+        accounts = {
+            "a": ACCOUNT_CFG,
+            "off": {"imap_host": "h", "username": "u", "password_env": "MF_UNSET",
+                    "mail_enabled": False},
+        }
+        bad_rules = {"off": {"rules": [rule({"from_contains": ["x"]}, {"move": "shop"})]}}
+        code, out, process = self.run_main(accounts, rules=bad_rules)
+        self.assertIsNone(code)
+        self.assertEqual(self.processed_ids(process), ["a"])
+        self.assertNotIn("ERROR", out)
+
+    def test_non_boolean_rejected(self):
+        for value in ("false", 0):
+            with self.subTest(value=value):
+                accounts = {"a": ACCOUNT_CFG, "bad": {**ACCOUNT_CFG, "mail_enabled": value}}
+                code, out, process = self.run_main(accounts)
+                self.assertEqual(code, 1)
+                process.assert_not_called()
+                self.assertIn(
+                    "ERROR: account 'bad' has an invalid \"mail_enabled\"; "
+                    "it must be true or false", out)
+                self.assertIn("ERROR: configuration format problem(s); no mail processed", out)
+
+
 if __name__ == "__main__":
     unittest.main()
