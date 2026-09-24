@@ -555,11 +555,17 @@ class LiveAccountMixin:
         found = self.find(case, "INBOX")
         self.assertEqual("\\Seen" in {f.decode() for f in found.flags}, seen,
                          f"{case}: \\Seen flag in INBOX")
+        # A stray \Deleted would lose the message at the next EXPUNGE,
+        # ours or a mail client's (a dry run never expunges)
+        self.assertNotIn(b"\\Deleted", found.flags, f"{case}: \\Deleted flag in INBOX")
 
     def assert_moved(self, case, mailbox, seen=False):
         found = self.find(case, mailbox)
         self.assertEqual("\\Seen" in {f.decode() for f in found.flags}, seen,
                          f"{case}: \\Seen flag in '{mailbox}'")
+        # COPY must come before \Deleted is set on the original, or the copy
+        # carries \Deleted and a later EXPUNGE removes the only copy
+        self.assertNotIn(b"\\Deleted", found.flags, f"{case}: \\Deleted flag in '{mailbox}'")
         self.find(case, "INBOX", present=False)
         # Gmail: the folder is a label, and \Inbox is gone. (Trash is not in All Mail.)
         if self.server.is_gmail and self.server.all_mail and mailbox != self.server.trash:
