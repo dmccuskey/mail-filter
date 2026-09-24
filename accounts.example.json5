@@ -1,6 +1,8 @@
 {
   // Each account is keyed by a stable ID, used by folders.local.json5 and rules.local.json5.
-  // Keep credentials only in accounts.local.json5.
+  // Set exactly one of "password" (the password itself) or
+  // "password_env" (the name of an environment variable holding it).
+  // Keep literal passwords only in accounts.local.json5.
   
   "aerospace-account": {
     "imap_host": "premium147.web-hosting.com",
@@ -11,6 +13,6 @@
   "gmail-main": {
     "imap_host": "imap.gmail.com",
     "username": "your-address@gmail.com",
-    "password": "REPLACE_WITH_PASSWORD"
+    "password_env": "MAILFILTER_PW_GMAIL_MAIN"
   }
 }

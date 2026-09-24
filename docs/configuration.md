@@ -42,7 +42,9 @@ accounts.local.json5
 └─ <account id>                 one entry per IMAP account
    ├─ imap_host   string
    ├─ username    string
-   └─ password    string
+   └─ one of:
+      ├─ password       string   the password itself
+      └─ password_env   string   name of an environment variable holding it
 ```
 
 Structure:
@@ -53,6 +55,11 @@ Structure:
     "imap_host": "imap.gmail.com",
     "username": "username@gmail.com",
     "password": "password"
+  },
+  "work": {
+    "imap_host": "imap.example.com",
+    "username": "me@example.com",
+    "password_env": "MAILFILTER_PW_WORK"
   }
 }
 ```
@@ -86,6 +93,12 @@ IMAP login username.
 IMAP password or application-specific password.
 
 Real credentials belong only in the local configuration.
+
+#### `password_env`
+
+Name of an environment variable that holds the IMAP password, used instead of `password`. The password then lives outside `accounts.local.json5`, so that file holds no secrets and can be backed up or versioned like the other config files.
+
+Each account sets exactly one of `password` or `password_env`, and accounts can mix the two styles. Before connecting to any account, the filter rejects an account that sets both, sets neither, or names a variable that is unset or empty; it logs one `ERROR` line per problem, processes no mail, and exits with status 1. See [Credentials](operations.md#credentials) for supplying the variable under cron.
 
 ## Folder Mapping
 

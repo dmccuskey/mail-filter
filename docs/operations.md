@@ -85,6 +85,8 @@ Example:
 
 This causes the filter to run every five minutes.
 
+If any account uses `password_env`, the cron line must also load the variables; see [Passwords from Environment Variables](#passwords-from-environment-variables).
+
 If `rules.local.json5` has an invalid rule, every cron run logs the startup rule errors and exits with status 1 without processing mail, until the rules are fixed.
 
 ## Logging
@@ -218,21 +220,33 @@ under a `umask` of `002`): without it, logrotate silently skips the file with
 
 ## Credentials
 
-Credentials are stored in:
+Credentials are stored in `accounts.local.json5`, either directly as `password` or indirectly as `password_env`, the name of an environment variable holding the password (see [`password_env`](configuration.md#password_env)).
 
-```text
-accounts.local.json5
+`accounts.local.json5` should remain outside Git while it holds any literal `password`. Use `accounts.example.json5` for the shareable configuration structure.
+
+### Passwords from Environment Variables
+
+With `password_env`, keep the variables in a secrets file readable only by the user that runs the filter:
+
+```bash
+# /home/pi/.config/mail-filter/secrets.env
+export MAILFILTER_PW_GMAIL_MAIN='app-password-here'
+export MAILFILTER_PW_AEROSPACE='app-password-here'
 ```
 
-That file should remain outside Git.
-
-Use:
-
-```text
-accounts.example.json5
+```bash
+chmod 600 /home/pi/.config/mail-filter/secrets.env
 ```
 
-for the shareable configuration structure.
+Cron does not read shell startup files, so source the secrets file in the cron line:
+
+```cron
+*/5 * * * * . /home/pi/.config/mail-filter/secrets.env && /usr/bin/python3 /home/pi/mail-filter/mail_filter.py >> /home/pi/mail-filter/mail_filter.log 2>&1
+```
+
+Source the same file before running `mail_filter.py` or `list_folders.py` by hand.
+
+A process's environment is readable only by its own user and root, so this is as private as a `chmod 600` `accounts.local.json5`, not more. The gain is that the secrets sit in one small file outside the project, and the password manager remains their master copy. Prefer application-specific passwords, which can be revoked individually.
 
 ## Live-System Safety
 

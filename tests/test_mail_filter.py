@@ -1097,5 +1097,99 @@ class ConfigFormatTests(unittest.TestCase):
             ["account 'test' in accounts.local.json5 must be an object"])
 
 
+class PasswordTests(unittest.TestCase):
+    """Each account sets exactly one of "password" or "password_env"."""
+
+    ENV_CFG = {"imap_host": "imap.example.com", "username": "u", "password_env": "MF_PW"}
+
+    def run_main(self, accounts, environ):
+        configs = {
+            "accounts.local.json5": accounts,
+            "folders.local.json5": {account_id: FOLDERS for account_id in accounts},
+            "rules.local.json5": {
+                account_id: {"rules": [rule({"to_local_is": ["me"]}, {"move": "shop"})]}
+                for account_id in accounts
+            },
+        }
+        process = mock.Mock()
+        with mock.patch.object(mail_filter, "load_json", lambda path: configs[Path(path).name]), \
+                mock.patch.object(mail_filter, "process_account", process), \
+                mock.patch.dict(mail_filter.os.environ, environ, clear=True), \
+                redirect_stdout(io.StringIO()) as out:
+            try:
+                mail_filter.main()
+                code = None
+            except SystemExit as exc:
+                code = exc.code
+        return code, out.getvalue(), process
+
+    def test_literal_password_is_valid_and_used(self):
+        self.assertEqual(mail_filter.password_problems("test", ACCOUNT_CFG, {}), [])
+        self.assertEqual(mail_filter.account_password(ACCOUNT_CFG, {}), "p")
+
+    def test_password_env_is_valid_and_read_from_environment(self):
+        environ = {"MF_PW": "secret"}
+        self.assertEqual(mail_filter.password_problems("test", self.ENV_CFG, environ), [])
+        self.assertEqual(mail_filter.account_password(self.ENV_CFG, environ), "secret")
+
+    def test_both_rejected(self):
+        cfg = {**ACCOUNT_CFG, "password_env": "MF_PW"}
+        self.assertEqual(
+            mail_filter.password_problems("test", cfg, {"MF_PW": "secret"}),
+            ['account \'test\' sets both "password" and "password_env"; use only one'])
+
+    def test_neither_rejected(self):
+        cfg = {"imap_host": "imap.example.com", "username": "u"}
+        self.assertEqual(
+            mail_filter.password_problems("test", cfg, {}),
+            ['account \'test\' sets neither "password" nor "password_env"'])
+
+    def test_unset_or_empty_variable_rejected(self):
+        for environ in ({}, {"MF_PW": ""}):
+            with self.subTest(environ=environ):
+                self.assertEqual(
+                    mail_filter.password_problems("test", self.ENV_CFG, environ),
+                    ["account 'test' reads its password from environment variable "
+                     "'MF_PW', which is not set or is empty"])
+
+    def test_invalid_variable_name_rejected(self):
+        for var in ("", 5, None):
+            with self.subTest(var=var):
+                cfg = {**self.ENV_CFG, "password_env": var}
+                self.assertEqual(len(mail_filter.password_problems("test", cfg, {})), 1)
+
+    def test_main_mixes_both_styles(self):
+        accounts = {"lit": ACCOUNT_CFG, "env": self.ENV_CFG}
+        code, _, process = self.run_main(accounts, {"MF_PW": "secret"})
+        self.assertIsNone(code)
+        self.assertEqual(process.call_count, 2)
+
+    def test_main_reports_all_problems_and_processes_nothing(self):
+        accounts = {
+            "env": self.ENV_CFG,
+            "both": {**ACCOUNT_CFG, "password_env": "MF_PW"},
+        }
+        code, out, process = self.run_main(accounts, {})
+        self.assertEqual(code, 1)
+        process.assert_not_called()
+        self.assertIn("ERROR: account 'env' reads its password from environment variable 'MF_PW'",
+                      out)
+        self.assertIn("ERROR: account 'both' sets both", out)
+        self.assertIn(
+            "ERROR: account password problem(s) in accounts.local.json5; no mail processed", out)
+        self.assertNotIn("Traceback", out)
+
+    def test_process_account_logs_in_with_environment_password(self):
+        imap = mock.Mock()
+        imap.login.side_effect = RuntimeError("stop after login")
+        account = {"id": "test", **self.ENV_CFG}
+        with mock.patch.object(mail_filter.imaplib, "IMAP4_SSL", return_value=imap), \
+                mock.patch.dict(mail_filter.os.environ, {"MF_PW": "secret"}, clear=True), \
+                redirect_stdout(io.StringIO()):
+            with self.assertRaises(RuntimeError):
+                mail_filter.process_account(account, FOLDERS, {"rules": []})
+        imap.login.assert_called_once_with("u", "secret")
+
+
 if __name__ == "__main__":
     unittest.main()

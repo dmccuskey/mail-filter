@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import imaplib
 import email
+import os
 import re
 import sys
 # import json
@@ -251,6 +252,54 @@ def validate_config_format(accounts_all, folders_all):
     return problems
 
 
+def password_problems(account_id, cfg, environ=None):
+    """
+    Return a message for every password problem in one account (empty if none).
+
+    Each account sets exactly one of "password" (the literal password) or
+    "password_env" (the name of an environment variable holding it).
+    """
+    environ = os.environ if environ is None else environ
+    has_password = "password" in cfg
+    has_env = "password_env" in cfg
+    if has_password and has_env:
+        return [
+            f"account '{account_id}' sets both \"password\" and \"password_env\"; "
+            "use only one"
+        ]
+    if not has_password and not has_env:
+        return [f"account '{account_id}' sets neither \"password\" nor \"password_env\""]
+    if has_env:
+        var = cfg["password_env"]
+        if not isinstance(var, str) or not var:
+            return [
+                f"account '{account_id}' has an invalid \"password_env\"; "
+                "it must be an environment variable name"
+            ]
+        if not environ.get(var):
+            return [
+                f"account '{account_id}' reads its password from environment variable "
+                f"'{var}', which is not set or is empty"
+            ]
+    return []
+
+
+def validate_passwords(accounts, environ=None):
+    """Return a message for every password problem in every account (empty if none)."""
+    problems = []
+    for account_id, cfg in accounts.items():
+        problems.extend(password_problems(account_id, cfg, environ))
+    return problems
+
+
+def account_password(cfg, environ=None):
+    """Return the account's password, from "password" or the "password_env" variable."""
+    environ = os.environ if environ is None else environ
+    if "password_env" in cfg:
+        return environ[cfg["password_env"]]
+    return cfg["password"]
+
+
 def match_field_matches(field, values, message):
     """
     True if any candidate string for the field matches any value
@@ -485,7 +534,7 @@ def process_account(account_cfg, folders_for_account, rules_cfg):
     account_id = account_cfg["id"]
     host = account_cfg["imap_host"]
     user = account_cfg["username"]
-    password = account_cfg["password"]
+    password = account_password(account_cfg)
 
     log(f"[{account_id}] Connecting to {host} as {user}")
     imap = imaplib.IMAP4_SSL(host)
@@ -636,6 +685,14 @@ def main():
         log(f"ERROR: {problem}")
     if format_problems:
         log("ERROR: configuration format problem(s); no mail processed")
+        sys.exit(1)
+
+    # Reject a missing or ambiguous password before connecting to any account
+    password_problem_list = validate_passwords(accounts_all)
+    for problem in password_problem_list:
+        log(f"ERROR: {problem}")
+    if password_problem_list:
+        log("ERROR: account password problem(s) in accounts.local.json5; no mail processed")
         sys.exit(1)
 
     accounts = [{**cfg, "id": account_id} for account_id, cfg in accounts_all.items()]

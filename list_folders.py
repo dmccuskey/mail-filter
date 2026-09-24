@@ -2,6 +2,8 @@ import sys
 import imaplib
 from pathlib import Path
 
+from mail_filter import account_password, password_problems
+
 try:
     import json5 as json_parser
 except ImportError:
@@ -39,9 +41,15 @@ if not isinstance(account, dict):
     print(f"Error: Account ID '{target_id}' not found in {CONFIG_FILE}.")
     sys.exit(1)
 
+problems = password_problems(target_id, account)
+if problems:
+    for problem in problems:
+        print(f"Error: {problem}.")
+    sys.exit(1)
+
 HOST = account["imap_host"]
 USER = account["username"]
-PASSWORD = account["password"]
+PASSWORD = account_password(account)
 
 
 # HOST = "HOSTNAME"
