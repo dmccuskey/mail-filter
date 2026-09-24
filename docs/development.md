@@ -172,7 +172,25 @@ Recordings are committed to the public repository, so they are scrubbed as they 
 - the account's username and IMAP host become `user@example.com` and `imap.example.com`, and the account ID becomes `test`;
 - in `LIST` replies, every mailbox except `INBOX`, special-use mailboxes (`\Trash`, `\All`, `\Sent`, `\Junk`, `\Drafts`, ...), and the test folders is renamed `Folder-1`, `Folder-2`, and so on.
 
-The filter fetches only the test messages, so no real message content is recorded. Still, read a new recording before committing it; the recording run prints how many mailbox names it replaced.
+The filter fetches only the test messages, so no real message content is recorded.
+
+#### Reviewing a Recording
+
+Recordings are public once committed. Before committing a new or changed recording, check it:
+
+```bash
+python3 imap_tests.py --check-recordings
+```
+
+`--record` runs the same check at the end. It reads `accounts.local.json5` and reports an `ERROR` for each of these found in `tests/fixtures/imap/*.txt`:
+
+- any account's username, the parts of it before and after the `@`, IMAP host, or account ID (whole words only, ignoring case; `gmail.com` is allowed);
+- any email address outside `example.com`, `example.org`, `example.net`, and `mail-filter.invalid` (the placeholders and test messages);
+- any `LIST` mailbox name other than `INBOX`, special-use mailboxes, the test folders, and `Folder-N` placeholders.
+
+Do not commit a recording the check rejects. Fix the cause, usually in the scrubbing in `tests/imap_recording.py`, and record again.
+
+The check cannot know everything that identifies you, for example a name that is not part of any configured account. So also skim the diff, and look at anything new in the logs and in `FETCH` and `LIST` replies. A recording made on a dedicated test account holds the least personal data.
 
 ### Behavior Changes
 
@@ -181,7 +199,7 @@ For changes affecting message identity or deletion:
 1. Start from the known-good baseline.
 2. Commit before modifying behavior.
 3. Run the unit tests.
-4. Run `python3 imap_tests.py --record` against a Gmail account and a non-Gmail account, and commit the updated recordings (see [Recorded IMAP Replies](#recorded-imap-replies)).
+4. Run `python3 imap_tests.py --record` against a Gmail account and a non-Gmail account. Review the updated recordings ([Reviewing a Recording](#reviewing-a-recording)) and commit them.
 5. Test with `DRY_RUN` on the real rules where applicable.
 6. Commit after successful verification.
 
@@ -201,7 +219,7 @@ Workflow:
 
 1. Branch from an up-to-date `main`: `git switch main && git pull && git switch -c fix/<name>`.
 2. Commit on the branch as often as useful; small commits are still preferred (see [Development Philosophy](#development-philosophy)).
-3. Before merging, run the unit tests. If the change touches IMAP behavior or the log output, also run `python3 imap_tests.py --record` on a Gmail account and a non-Gmail account, and commit the updated recordings (see [Testing](#testing)). Documentation-only changes need neither.
+3. Before merging, run the unit tests. If the change touches IMAP behavior or the log output, also run `python3 imap_tests.py --record` on a Gmail account and a non-Gmail account, then review the updated recordings ([Reviewing a Recording](#reviewing-a-recording)) and commit them. Documentation-only changes need neither.
 4. Merge into `main` with a GitHub pull request or `git merge`, push, and delete the branch.
 5. Update the deployment: `git pull` in `/home/pi/mail-filter`.
 

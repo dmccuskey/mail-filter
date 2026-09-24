@@ -189,6 +189,77 @@ class RecordedIMAP:
         return self.answer("expunge")
 
 
+# Addresses allowed in a recording: placeholders, test senders, test Message-IDs
+ALLOWED_ADDRESS_DOMAINS = ("example.com", "example.org", "example.net", "mail-filter.invalid")
+ADDRESS = re.compile(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)+)")
+PLACEHOLDER_FOLDER = re.compile(rb"^Folder-\d+$")
+TEST_FOLDER_ROOT = b"mail-filter-live-tests"
+
+
+def recording_problems(path, accounts):
+    """
+    Return a message for everything in a recording that may identify its
+    owner (empty if none). accounts is accounts.local.json5, whose usernames,
+    hosts, and account IDs must not appear.
+    """
+    text = path.read_text(encoding="latin-1")
+    problems = []
+
+    needles = {}
+    for account_id, cfg in accounts.items():
+        username = cfg.get("username", "") if isinstance(cfg, dict) else ""
+        host = cfg.get("imap_host", "") if isinstance(cfg, dict) else ""
+        local, _, domain = username.partition("@")
+        for value, what in [(account_id, "account ID"), (username, "username"),
+                            (local, "username"), (domain, "username domain"),
+                            (host, "IMAP host")]:
+            if len(value) >= 3 and value not in (PLACEHOLDER_ACCOUNT, "gmail.com"):
+                needles.setdefault(value, f"{what} of account '{account_id}'")
+    for value, what in sorted(needles.items()):
+        # A whole word: "jane" in "jane@corp.example", not in "janet"
+        pattern = r"(?<![\w.-])" + re.escape(value) + r"(?![\w-])"
+        if re.search(pattern, text, re.IGNORECASE):
+            problems.append(f"contains the {what}: {value!r}")
+
+    # pprint may split a long string over two lines; addresses are checked
+    # in the recording's values, not its layout
+    recording = read_recording(path)
+    strings = []
+
+    def collect(value):
+        if isinstance(value, (bytes, str)):
+            strings.append(value.decode("latin-1") if isinstance(value, bytes) else value)
+        elif isinstance(value, (tuple, list)):
+            for item in value:
+                collect(item)
+        elif isinstance(value, dict):
+            for item in value.values():
+                collect(item)
+    collect(recording)
+    for domain in sorted({m.group(1).lower() for s in strings for m in ADDRESS.finditer(s)}):
+        if not domain.endswith(ALLOWED_ADDRESS_DOMAINS):
+            problems.append(f"contains an address at '{domain}'")
+
+    for batch in recording["batches"]:
+        for method, _, reply in batch["exchanges"]:
+            if method != "list":
+                continue
+            for entry in reply[1] or []:
+                parsed = mail_filter.parse_list_entry(entry)
+                if parsed and not folder_name_allowed(*parsed):
+                    problems.append(f"lists a personal mailbox name: {parsed[1]!r}")
+    return sorted(set(problems))
+
+
+def folder_name_allowed(attrs, name):
+    """INBOX, special-use and test mailboxes, and scrubbed placeholders."""
+    if name.upper() == b"INBOX" or name in (b"[Gmail]", b"[Google Mail]"):
+        return True
+    if SPECIAL_USE & set(attrs.lower().split()):
+        return True
+    return TEST_FOLDER_ROOT in name or bool(PLACEHOLDER_FOLDER.match(name))
+
+
 def write_recording(path, server, batches):
     """Write a recording as a Python literal (read back with ast.literal_eval)."""
     recording = {"server": server, "recorded": date.today().isoformat(), "batches": batches}
