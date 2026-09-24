@@ -147,6 +147,20 @@ def find_advertised_trash(imap):
         return None, f"advertised \\Trash name {name!r} is not ASCII"
 
 
+def fetched_body(data):
+    """
+    Return the message bytes from a UID FETCH ... (BODY.PEEK[]) result, or None.
+
+    imaplib gathers every untagged FETCH response into the result, so the
+    body's (prefix, literal) pair need not be first: the server may add flag
+    updates for other messages, e.g. b'3 (FLAGS (\\Seen))', before or after it.
+    """
+    for item in data or []:
+        if isinstance(item, tuple) and len(item) >= 2 and b"BODY[" in item[0].upper():
+            return item[1]
+    return None
+
+
 def as_list(value):
     """
     Normalize a match value to a list.
@@ -637,8 +651,12 @@ def process_account(account_cfg, folders_for_account, rules_cfg, test_run_id=Non
         if status != "OK":
             log(f"[{account_id}] ERROR: fetch {msg_ref} failed (status={status})")
             continue
+        body = fetched_body(data)
+        if body is None:
+            log(f"[{account_id}] ERROR: fetch {msg_ref} returned no message body")
+            continue
 
-        msg = email.message_from_bytes(data[0][1])
+        msg = email.message_from_bytes(body)
 
         # Test messages belong only to the test run that created them
         if msg.get(TEST_HEADER) != test_run_id:

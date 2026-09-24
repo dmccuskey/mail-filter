@@ -955,6 +955,40 @@ class ChooseRuleTests(unittest.TestCase):
         })
 
 
+class FetchResponseTests(unittest.TestCase):
+    """The body is found among untagged FETCH responses in any order."""
+
+    BODY = raw_message(subject="hello")
+
+    def test_body_after_unsolicited_flag_update(self):
+        data = [b"3 (FLAGS (\\Seen))", (b"1 (UID 7 BODY[] {40}", self.BODY), b")"]
+        self.assertEqual(mail_filter.fetched_body(data), self.BODY)
+
+    def test_body_before_flag_update(self):
+        data = [(b"1 (UID 7 BODY[] {40}", self.BODY), b")", b"3 (FLAGS (\\Seen))"]
+        self.assertEqual(mail_filter.fetched_body(data), self.BODY)
+
+    def test_no_body(self):
+        self.assertIsNone(mail_filter.fetched_body([None]))
+        self.assertIsNone(mail_filter.fetched_body([b"3 (FLAGS (\\Seen))"]))
+
+    def test_process_account_skips_message_without_body(self):
+        fake = FakeIMAP({b"1": raw_message(subject="a"), b"2": raw_message(subject="b")})
+        real_uid = fake.uid
+
+        def uid(command, *args):
+            status, data = real_uid(command, *args)
+            if command == "FETCH":
+                # unsolicited flag update first; message 1 has vanished
+                data = [b"9 (FLAGS (\\Seen))"] + ([] if args[0] == b"1" else data)
+            return status, data
+
+        fake.uid = uid
+        out = run_account(fake, {"rules": [rule(ANY, {"move": "shop"})]})
+        self.assertIn("[test] ERROR: fetch #1 returned no message body", out)
+        self.assertEqual(message_lines(out), ["[test] MATCHED #2 RULE='r' SUBJECT='b' → Shopping"])
+
+
 class FoldedHeaderTests(unittest.TestCase):
     """A long header folded onto several lines is unfolded before matching and logging."""
 
