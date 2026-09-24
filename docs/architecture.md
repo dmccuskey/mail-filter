@@ -8,11 +8,11 @@ It replaces GUI-based mail filtering with a deterministic, configuration-driven 
 
 The system:
 
-1. Connects to one or more IMAP accounts.
+1. Connects to each IMAP account with `mail_enabled` (the default); other accounts are skipped.
 2. Selects the account's `INBOX`.
 3. Finds unseen messages.
 4. Fetches each message without changing its read state.
-5. Extracts recipients, sender information, and subject.
+5. Extracts recipients, sender information, and subject, unfolding folded headers. Messages created by the live IMAP tests (with an `X-Mail-Filter-Test` header) are logged as `IGNORED` and left alone.
 6. Evaluates the configured rules in order.
 7. Applies the first matching rule.
 8. Removes moved or trashed messages from `INBOX`: with `UID MOVE` on Gmail, or by copying them and marking the originals `\Deleted` on other servers.

@@ -15,7 +15,8 @@ Mail Filter connects to one or more IMAP accounts, evaluates unseen messages aga
 - MIME-decoded subject matching
 - Exact, substring, prefix, and suffix matching for every field
 - Invalid rules (unknown match fields, empty matches) rejected at startup
-- Move, delete, and mark-read actions
+- Move, trash, delete, and mark-read actions
+- Per-account on/off switch (`mail_enabled`)
 - Optional catch-all routing
 - Dry-run support
 - Live IMAP tests against your own servers (`imap_tests.py`)
@@ -95,6 +96,8 @@ Development checkpoints, planned changes, the completed UID migration, the roadm
 The current implementation is the known-good live baseline.
 
 Message operations use IMAP UIDs rather than sequence numbers (see ADR 005). `move`, `trash`, and `delete` are distinct actions; on Gmail, `move` and `trash` use `UID MOVE` instead of `\Deleted` and EXPUNGE (see ADR 006).
+
+IMAP behavior is checked by live tests against real servers and by recorded server replies replayed offline (see ADR 008 and [Testing](docs/development.md#testing)).
 
 The project intentionally keeps those changes separate so the current live filtering system remains easy to revert.
 

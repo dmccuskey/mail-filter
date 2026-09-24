@@ -20,10 +20,12 @@ The current implementation is the known-good live baseline.
 
 It currently:
 
-- supports multiple IMAP accounts
+- supports multiple IMAP accounts, each of which can be turned off with `mail_enabled`
 - uses JSON5 configuration
 - uses logical folder mappings
 - processes unseen messages
+- unfolds folded headers before matching and logging
+- leaves messages created by the live IMAP tests alone (logged as `IGNORED`)
 - evaluates ordered rules
 - supports the `to_*`, `to_local_*`, `from_email_*`, `from_name_*`, and `subject_*` match fields, each with `_is`, `_contains`, `_starts_with`, and `_ends_with` (recipient fields read the `To` header only)
 - rejects invalid rules (unknown match fields, empty matches) before connecting to any account
@@ -33,8 +35,9 @@ It currently:
 - supports `mark_read`
 - supports catch-all rules
 - identifies messages by IMAP UID throughout processing
-- uses Gmail label operations for `move` and `trash` on Gmail
-- performs EXPUNGE after the processing loop when a message was marked `\Deleted`
+- uses `UID MOVE` for `move` and `trash` on Gmail ([ADR 006 amendment](decisions/006-gmail-move-and-trash-semantics.md#amendment-gmail-uses-uid-move))
+- on other servers, copies moved messages, marks the originals `\Deleted`, and performs EXPUNGE after the processing loop
+- is tested by unit tests, live IMAP tests against real servers, and recorded server replies replayed offline (see [Testing](#testing))
 
 This baseline should remain easy to restore.
 
@@ -261,6 +264,10 @@ Gmail move / Trash behavior (complete; ADR 006)
         │
         ▼
 CHECKPOINT 3
+Live IMAP tests and recorded replies (complete; ADR 008)
+        │
+        ▼
+CHECKPOINT 4
 Additional rule features
 ```
 
