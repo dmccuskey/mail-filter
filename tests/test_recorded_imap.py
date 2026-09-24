@@ -135,6 +135,56 @@ class RecordingMachineryTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "not in the recording"):
             fake.uid("SEARCH", "UNSEEN")
 
+    def check(self, exchanges, log=("[test] Done",)):
+        accounts = {
+            "work-mail": {"imap_host": "mail.private.example", "username": "jane@corp.example"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "imap.txt"
+            imap_recording.write_recording(
+                path, "imap", [{"batch": "a", "log": list(log), "exchanges": exchanges}])
+            return imap_recording.recording_problems(path, accounts)
+
+    def test_clean_recording_has_no_problems(self):
+        self.assertEqual(self.check([
+            ("list", ('""', "*"), ("OK", [
+                b'(\\HasChildren) "." "INBOX"',
+                b'(\\Trash) "." "INBOX.Papierkorb"',
+                b'(\\HasNoChildren) "." "INBOX.mail-filter-live-tests.moved"',
+                b'(\\HasNoChildren) "." "Folder-3"',
+            ])),
+            ("uid", ("FETCH", b"7", "(BODY.PEEK[])"), ("OK", [
+                (b"1 (UID 7 BODY[] {9}", b"From: mail-filter live test <live-test@example.org>\r\n"
+                                         b"Message-ID: <mft1xa.move@mail-filter.invalid>"),
+                b")"])),
+        ], log=["[test] Connecting to imap.example.com as user@example.com"]), [])
+
+    def test_identifying_details_are_reported(self):
+        problems = self.check([
+            ("uid", ("SEARCH", "UNSEEN"), ("OK", [b"Jane@Corp.example via mail.private.example"])),
+        ], log=["[work-mail] Done"])
+        self.assertEqual(problems, [
+            "contains an address at 'corp.example'",
+            "contains the IMAP host of account 'work-mail': 'mail.private.example'",
+            "contains the account ID of account 'work-mail': 'work-mail'",
+            "contains the username domain of account 'work-mail': 'corp.example'",
+            "contains the username of account 'work-mail': 'jane'",
+            "contains the username of account 'work-mail': 'jane@corp.example'",
+        ])
+
+    def test_personal_mailbox_names_are_reported(self):
+        self.assertEqual(self.check([
+            ("list", ('""', "*"), ("OK", [b'(\\HasNoChildren) "." "INBOX.Taxes 2025"'])),
+        ]), ["lists a personal mailbox name: b'INBOX.Taxes 2025'"])
+
+    def test_short_values_match_only_whole_words(self):
+        accounts = {"abc": {"imap_host": "", "username": "abc@example.com"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "imap.txt"
+            imap_recording.write_recording(path, "imap", [
+                {"batch": "a", "log": ["[test] abcdef"], "exchanges": []}])
+            self.assertEqual(imap_recording.recording_problems(path, accounts), [])
+
     def test_written_recording_reads_back_identically(self):
         batches = [{"batch": "a", "log": ["[test] Done"],
                     "exchanges": [("uid", ("FETCH", b"7", "(BODY.PEEK[])"),
