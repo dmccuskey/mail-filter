@@ -159,7 +159,12 @@ python3 imap_tests.py --record
 
 This runs the live tests as usual and also saves the filter's own IMAP conversation for each account. Each command it sent is saved with the reply `imaplib` returned. The file is `tests/fixtures/imap/gmail.txt` for Gmail and `tests/fixtures/imap/imap.txt` for other servers; a second account of the same kind gets `imap-2.txt`, and so on. An existing recording is overwritten.
 
-`python3 -m unittest discover tests` replays every recording. It runs `process_account` against the recorded replies and requires exactly the log lines the live run produced. Replies are looked up by the exact command, not by position, so reordering commands does not break a recording. A new or changed command fails with `IMAP command not in the recording`. When that is intended, run `imap_tests.py --record` again and commit the new recordings with the change.
+`python3 -m unittest discover tests` replays every recording. It runs `process_account` against the recorded replies and requires exactly the log lines the live run produced. Replies are looked up by the exact command, not by position, so reordering commands does not break a recording. A recording goes stale in two ways:
+
+- the filter sends a new or changed IMAP command, which fails with `IMAP command not in the recording`;
+- the filter's log output changes, which fails because the replayed log no longer matches the recorded one.
+
+When the change is intended, run `python3 imap_tests.py --record` on the branch and commit the new recordings together with the change.
 
 Recordings are committed to the public repository, so they are scrubbed as they are written:
 
@@ -176,7 +181,7 @@ For changes affecting message identity or deletion:
 1. Start from the known-good baseline.
 2. Commit before modifying behavior.
 3. Run the unit tests.
-4. Run `python3 imap_tests.py` against a Gmail account and a non-Gmail account.
+4. Run `python3 imap_tests.py --record` against a Gmail account and a non-Gmail account, and commit the updated recordings (see [Recorded IMAP Replies](#recorded-imap-replies)).
 5. Test with `DRY_RUN` on the real rules where applicable.
 6. Commit after successful verification.
 
@@ -196,7 +201,7 @@ Workflow:
 
 1. Branch from an up-to-date `main`: `git switch main && git pull && git switch -c fix/<name>`.
 2. Commit on the branch as often as useful; small commits are still preferred (see [Development Philosophy](#development-philosophy)).
-3. Before merging, run the unit tests. If the change touches IMAP behavior, also run `python3 imap_tests.py` on a Gmail account and a non-Gmail account (see [Testing](#testing)). Documentation-only changes need neither.
+3. Before merging, run the unit tests. If the change touches IMAP behavior or the log output, also run `python3 imap_tests.py --record` on a Gmail account and a non-Gmail account, and commit the updated recordings (see [Testing](#testing)). Documentation-only changes need neither.
 4. Merge into `main` with a GitHub pull request or `git merge`, push, and delete the branch.
 5. Update the deployment: `git pull` in `/home/pi/mail-filter`.
 
