@@ -484,6 +484,47 @@ class FindAdvertisedTrashTests(unittest.TestCase):
         self.assertIsNone(self.find(entries)[0])
 
 
+class ParseListEntryTests(unittest.TestCase):
+    """Mailbox names are extracted from LIST data whatever the delimiter."""
+
+    def name(self, entry):
+        return mail_filter.parse_list_entry(entry)[1]
+
+    def test_slash_delimiter_quoted_name(self):
+        self.assertEqual(self.name(b'(\\HasNoChildren) "/" "[Gmail]/Promotions"'),
+                         b"[Gmail]/Promotions")
+
+    def test_dot_delimiter_unquoted_name(self):
+        self.assertEqual(self.name(b'(\\HasNoChildren) "." INBOX.Archive'),
+                         b"INBOX.Archive")
+
+    def test_dot_delimiter_quoted_name_with_space(self):
+        self.assertEqual(self.name(b'(\\HasNoChildren) "." "INBOX.Services.To Review"'),
+                         b"INBOX.Services.To Review")
+
+    def test_other_delimiter(self):
+        self.assertEqual(self.name(b'() "\\\\" "Work\\\\Projects"'), b"Work\\Projects")
+
+    def test_nil_delimiter(self):
+        self.assertEqual(self.name(b'(\\Noinferiors) NIL INBOX'), b"INBOX")
+
+    def test_quoted_name_escapes_are_removed(self):
+        self.assertEqual(self.name(b'() "/" "Say \\"hi\\""'), b'Say "hi"')
+
+    def test_literal_name(self):
+        self.assertEqual(self.name((b'(\\HasNoChildren) "/" {9}', b"Corbeille")),
+                         b"Corbeille")
+
+    def test_attributes(self):
+        attrs, _ = mail_filter.parse_list_entry(b'(\\HasNoChildren \\Trash) "." INBOX.Trash')
+        self.assertEqual(attrs, b"\\HasNoChildren \\Trash")
+
+    def test_non_list_entries(self):
+        for entry in (None, b"", b")"):
+            with self.subTest(entry=entry):
+                self.assertIsNone(mail_filter.parse_list_entry(entry))
+
+
 class TrashResolutionTests(unittest.TestCase):
     """trash: true resolves config "trash" first, then the server's \\Trash."""
 

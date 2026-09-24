@@ -61,6 +61,8 @@ This is intended for troubleshooting rather than normal operation.
 
 `list_folders.py` can inspect the mailboxes available on a configured account.
 
+Use it when writing `folders.local.json5`. Each mapping value must be the mailbox's exact IMAP name. That name can differ from what a mail client displays, because it includes the server's hierarchy delimiter and any prefix, such as `INBOX.Services.Payments` or `[Gmail]/Promotions`. Copy those names from the "Extracted mailbox names" section of this tool's output.
+
 It uses the account information from `accounts.local.json5`, loaded from the directory containing `list_folders.py`, regardless of the current working directory.
 
 Usage:

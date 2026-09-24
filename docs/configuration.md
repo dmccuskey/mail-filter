@@ -126,7 +126,9 @@ Example:
 
 The left-hand value is the stable key used by rules.
 
-The right-hand value is the actual mailbox name understood by the IMAP server.
+The right-hand value is the mailbox's exact name on the IMAP server. This can differ from the name a mail client displays: it includes the server's hierarchy delimiter (usually `.` or `/`) and any prefix, such as `INBOX.` or `[Gmail]/`, and it is usually case-sensitive (IMAP only guarantees that `INBOX` is not). To get the exact names, run `python3 list_folders.py <account_id>` and copy them from its "Extracted mailbox names" section.
+
+Mailbox names are never discovered from the server, so a wrong name is not corrected; it is caught at startup and logged as a warning (see [Folder Validation](#folder-validation)).
 
 The key `trash` is reserved for the `trash` action and is optional. Trash is a role the server defines, so it is resolved differently from ordinary logical folders:
 
@@ -134,7 +136,7 @@ The key `trash` is reserved for the `trash` action and is optional. Trash is a r
 2. otherwise the mailbox the server advertises with the IMAP `\Trash` attribute (for example `[Gmail]/Trash` or `INBOX.Trash`);
 3. otherwise the `trash` action is skipped for that account.
 
-Add a `trash` mapping only to override the server's Trash mailbox, or for a server that does not advertise `\Trash`. To see what a server advertises, run `python3 list_folders.py <account_id>` and look for `\Trash` in the attributes. Ordinary logical folders are never discovered from the server.
+Add a `trash` mapping only to override the server's Trash mailbox, or for a server that does not advertise `\Trash`. To see what a server advertises, run `python3 list_folders.py <account_id>` and look for `\Trash` in the attributes.
 
 This abstraction allows the same rule vocabulary to work with different mailbox naming conventions.
 

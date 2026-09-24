@@ -2,7 +2,7 @@ import sys
 import imaplib
 from pathlib import Path
 
-from mail_filter import account_password, password_problems
+from mail_filter import account_password, parse_list_entry, password_problems
 
 try:
     import json5 as json_parser
@@ -64,22 +64,19 @@ status, mailboxes = imap.list()
 print("\n--- Raw IMAP folder list ---\n")
 
 for m in mailboxes:
-    line = m.decode(errors="ignore")
-    print(line)
+    if isinstance(m, tuple):  # mailbox name sent as a literal
+        m = b" ".join(m)
+    if m is not None:
+        print(m.decode(errors="ignore"))
 
 print("\n--- Extracted mailbox names ---\n")
 
 for m in mailboxes:
-    line = m.decode(errors="ignore")
-
-    # Try to extract just the name portion
-    if ' "/" ' in line:
-        parts = line.split(' "/" ')
-        name = parts[-1].strip().strip('"')
-    else:
-        name = line
-
-    print(name)
+    parsed = parse_list_entry(m)
+    if parsed is None:
+        continue
+    _, name = parsed
+    print(name.decode(errors="replace"))
 
 imap.logout()
 

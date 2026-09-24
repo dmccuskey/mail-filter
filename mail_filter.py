@@ -81,6 +81,29 @@ def detect_gmail(imap):
 LIST_LINE = re.compile(rb'^\((?P<attrs>[^)]*)\) (?:"(?:[^"\\]|\\.)*"|NIL) (?P<name>.+)$')
 
 
+def parse_list_entry(entry):
+    """
+    Parse one entry of imaplib's LIST result into (attrs, name) as bytes, or
+    return None if it is not a LIST line. The name is exactly the server's
+    mailbox name, with quoting removed, whatever the hierarchy delimiter.
+    """
+    if entry is None:  # imaplib's result when there are no mailboxes
+        return None
+    if isinstance(entry, tuple):
+        head, literal_name = entry[0], entry[1]
+    else:
+        head, literal_name = entry, None
+    match = LIST_LINE.match(head)
+    if not match:
+        return None
+    if literal_name is not None:
+        return match.group("attrs"), literal_name
+    name = match.group("name")
+    if len(name) >= 2 and name.startswith(b'"') and name.endswith(b'"'):
+        name = re.sub(rb"\\(.)", rb"\1", name[1:-1])
+    return match.group("attrs"), name
+
+
 def find_advertised_trash(imap):
     """
     Return (mailbox, None) for the one mailbox the server advertises with the
@@ -96,20 +119,12 @@ def find_advertised_trash(imap):
 
     found = []
     for entry in entries or []:
-        if entry is None:  # imaplib's result when there are no mailboxes
+        parsed = parse_list_entry(entry)
+        if parsed is None:
             continue
-        if isinstance(entry, tuple):
-            head, literal_name = entry[0], entry[1]
-        else:
-            head, literal_name = entry, None
-        match = LIST_LINE.match(head)
-        if not match:
+        attrs, name = parsed
+        if b"\\trash" not in attrs.lower().split():
             continue
-        if b"\\trash" not in match.group("attrs").lower().split():
-            continue
-        name = literal_name if literal_name is not None else match.group("name")
-        if literal_name is None and name.startswith(b'"') and name.endswith(b'"'):
-            name = name[1:-1]
         found.append(name)
 
     if not found:
