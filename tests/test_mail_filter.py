@@ -122,7 +122,7 @@ class FakeIMAP:
 
 
 ACCOUNT = {"id": "test", "imap_host": "imap.example.com", "username": "u", "password": "p"}
-FOLDERS = {"shop": "Shopping", "catch_all": "Catch All"}
+FOLDERS = {"shop": "Shopping", "archive": "Archive"}
 TRASH_FOLDERS = {**FOLDERS, "trash": "INBOX.Trash"}
 GMAIL_FOLDERS = {"github": "GitHub", "trash": "[Gmail]/Trash"}
 
@@ -222,11 +222,11 @@ class ProcessAccountUidTests(unittest.TestCase):
         fake = FakeIMAP({b"300": raw_message(to="random@example.com")})
         run_account(fake, {
             "rules": [rule({"to_local_starts_with": ["shop-"]}, {"move": "shop"})],
-            "catch_all": {"move": "catch_all"},
+            "catch_all": {"move": "archive"},
         })
 
         self.assertEqual(fake.message_calls(), [
-            ("UID", "COPY", b"300", '"Catch All"'),
+            ("UID", "COPY", b"300", '"Archive"'),
             ("UID", "STORE", b"300", "+FLAGS", "(\\Deleted)"),
         ])
 
@@ -900,9 +900,9 @@ class ChooseRuleTests(unittest.TestCase):
 
     def test_catch_all_fallback(self):
         cfg = {"rules": [rule({"to_local_is": ["me"]}, {"move": "x"})],
-               "catch_all": {"move": "catch_all", "mark_read": False}}
+               "catch_all": {"move": "archive", "mark_read": False}}
         self.assertEqual(self.choose(cfg, ["other@example.com"]), {
-            "name": "<catch_all>", "move": "catch_all", "trash": False,
+            "name": "<catch_all>", "move": "archive", "trash": False,
             "delete": False, "mark_read": False,
         })
 

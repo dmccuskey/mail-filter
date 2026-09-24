@@ -333,7 +333,7 @@ An account can define:
 
 ```json5
 "catch_all": {
-  "move": "catch_all"
+  "move": "archive"
 }
 ```
 

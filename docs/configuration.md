@@ -25,6 +25,17 @@ The `.local.json5` files must be located in the same directory as `mail_filter.p
 
 `accounts.local.json5` defines the IMAP accounts processed by the engine.
 
+Schema:
+
+```text
+accounts.local.json5
+└─ accounts: [ ... ]            one entry per IMAP account
+   ├─ id          string        selects this account's folders and rules
+   ├─ imap_host   string
+   ├─ username    string
+   └─ password    string
+```
+
 Structure:
 
 ```json5
@@ -73,6 +84,16 @@ Real credentials belong only in the local configuration.
 ## Folder Mapping
 
 `folders.local.json5` maps logical folder keys to actual IMAP mailbox names.
+
+Schema:
+
+```text
+folders.local.json5
+└─ folders
+   └─ <account id>
+      ├─ <folder key>: "<mailbox>"   any number; used by move
+      └─ trash: "<mailbox>"          optional, reserved (see below)
+```
 
 Example:
 
@@ -125,6 +146,29 @@ A missing mapping referenced by a move rule is also logged and that message is s
 
 Rules are stored under the account ID.
 
+Schema:
+
+```text
+rules.local.json5
+└─ <account id>
+   ├─ rules: [ ... ]                 checked top to bottom; first match wins
+   │  ├─ name       string           optional; shown in logs
+   │  ├─ match      { <field>: string | [string, ...] }
+   │  │                               fields are ANDed, values are ORed
+   │  └─ do
+   │     ├─ move       <folder key>
+   │     ├─ trash      true | false
+   │     ├─ delete     true | false
+   │     └─ mark_read  true | false
+   └─ catch_all                      optional; used only when no rule matches
+      ├─ move       <folder key>
+      ├─ trash      true | false
+      ├─ delete     true | false
+      └─ mark_read  true | false
+```
+
+`catch_all` takes the same actions as a rule's `do`, but has no `name` or `match`; it is logged as `RULE='<catch_all>'`. Match fields are listed in the [Rule Reference](rule-reference.md).
+
 Example:
 
 ```json5
@@ -148,15 +192,20 @@ Example:
 
 The supported match fields are listed in the [Rule Reference](rule-reference.md). Before connecting to any account, the filter checks every account's rules; if any rule uses an unknown match field, it logs an error for each one (naming the account, rule, and field), processes no mail, and exits with status 1.
 
-An optional `catch_all` may follow the rules:
+An optional `catch_all` sits in the account next to `rules`, and applies only when no rule matches:
 
 ```json5
 {
-  "catch_all": {
-    "move": "catch_all"
+  "aerospace-account": {
+    "rules": [ /* ... */ ],
+    "catch_all": {
+      "move": "archive"
+    }
   }
 }
 ```
+
+Like any `move`, `archive` here is a folder key from `folders.local.json5`.
 
 ## Local vs Example Configuration
 

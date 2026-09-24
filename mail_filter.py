@@ -227,7 +227,7 @@ def choose_rule(to_addresses, subject, from_addr, from_name, rules_cfg):
     rules_cfg example:
     {
       "rules": [ { "name": "...", "match": {...}, "do": {...} }, ... ],
-      "catch_all": { "move": "catch_all", "mark_read": false }
+      "catch_all": { "move": "archive", "mark_read": false }
     }
 
     Returns dict:

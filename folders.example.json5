@@ -13,7 +13,7 @@
       "inbox": "INBOX",
       "health_delete": "INBOX.Health.To Delete",
       "services_payments": "INBOX.Services.Payments",
-      "catch_all": "INBOX.Archive",
+      "archive": "INBOX.Archive",
       "trash": "INBOX.Trash"
     },
 

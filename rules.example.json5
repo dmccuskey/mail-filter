@@ -32,6 +32,11 @@
         },
       },
     ],
+
+    // Optional: applies only when no rule above matches.
+    "catch_all": {
+      "move": "archive",
+    },
   },
 
   "gmail-main": {
