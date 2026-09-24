@@ -38,7 +38,11 @@ It currently:
 
 This baseline should remain easy to restore.
 
-## Planned Rule Features
+## Possible Future Changes
+
+Ideas that have come up but are not decided. Each needs further discussion before it is worked on, and should be implemented only when there is a concrete use case.
+
+### Rule Features
 
 The configuration/history contains several rule features that are not currently implemented:
 
@@ -48,7 +52,10 @@ The configuration/history contains several rule features that are not currently 
 - `mark_unread`
 - rule-level `log`
 
-These should be implemented only when there is a concrete use case.
+Possible new match features:
+
+- `cc_*` matchers for the `Cc` header
+- configurable AND/OR combination of match values
 
 Before implementation, each feature should be defined in terms of:
 
@@ -57,6 +64,17 @@ Before implementation, each feature should be defined in terms of:
 3. interaction with existing matchers
 4. tests
 5. documentation
+
+### Testing
+
+Left open when the live IMAP tests were added ([issue #1](https://github.com/dmccuskey/mail-filter/issues/1)):
+
+- offline rule regression tests: check that the real `rules.local.json5` routes known messages to the expected rule, with one command and no server. Most useful for large or often-edited rule sets; with a small set, spotting a misrouted message in the mail client, moving it back to `INBOX`, and adjusting the rule with `DRY_RUN` works well.
+  - examples as a gitignored case file of `{from, to, subject}` and the expected rule (or none), run through `choose_rule()`;
+  - or, closer to real mail, a gitignored folder of `.eml` files (for example dragged out of Apple Mail), which also tests header parsing on what senders actually send: `To` headers without your address, MIME-encoded subjects and names, folded headers;
+  - the `.eml` version needs header parsing (recipients, decoded subject, sender name and address) moved out of `process_account()` into a helper.
+- Gmail: a live check that a moved message keeps its other labels ([issue #2](https://github.com/dmccuskey/mail-filter/issues/2))
+- Dovecot in Docker (with a `\Trash` special-use mailbox), so generic IMAP can be tested without an account, possibly in GitHub Actions
 
 ## UID Migration
 
