@@ -160,7 +160,7 @@ def decode_mime_header(value: str) -> str:
 
 
 class RuleConfigError(ValueError):
-    """A rule in the rules config is invalid, e.g. an unknown match field."""
+    """A rule in the rules config is invalid, e.g. an unknown match field or an empty match."""
 
 
 # Match fields: each returns the candidate strings for one message.
@@ -190,16 +190,36 @@ def unknown_match_field_message(index, rule_name, field):
     return f"rule #{index} '{rule_name}' uses unknown match field '{field}'"
 
 
+def rule_problems(index, rule):
+    """
+    Return a message for every problem in one rule (empty if none).
+
+    Never ignore a bad field: that would drop a condition. An empty match
+    would match every message; catch_all is the way to do that.
+    """
+    rule_name = rule.get("name", "<unnamed>")
+    match_cfg = rule.get("match", {}) or {}
+    if not match_cfg:
+        return [
+            f"rule #{index} '{rule_name}' has an empty match; "
+            "use catch_all to act on every unmatched message"
+        ]
+    problems = []
+    for field, values in match_cfg.items():
+        if field not in MATCHERS:
+            problems.append(unknown_match_field_message(index, rule_name, field))
+        elif not any(as_list(values)):
+            problems.append(
+                f"rule #{index} '{rule_name}' has no values for match field '{field}'"
+            )
+    return problems
+
+
 def validate_rules(rules_cfg):
-    """Return a message for every unknown match field in the rules (empty if none)."""
+    """Return a message for every problem in every rule (empty if none)."""
     problems = []
     for index, rule in enumerate(rules_cfg.get("rules", []), start=1):
-        match_cfg = rule.get("match", {}) or {}
-        for field in match_cfg:
-            if field not in MATCHERS:
-                problems.append(unknown_match_field_message(
-                    index, rule.get("name", "<unnamed>"), field
-                ))
+        problems.extend(rule_problems(index, rule))
     return problems
 
 
@@ -234,7 +254,8 @@ def validate_config_format(accounts_all, folders_all):
 def match_field_matches(field, values, message):
     """
     True if any candidate string for the field matches any value
-    (case-insensitive). An empty value list is no constraint.
+    (case-insensitive). Empty values are ignored; rule_problems rejects
+    a field with no non-empty values.
     """
     values = [v.lower() for v in as_list(values) if v]
     if not values:
@@ -283,12 +304,9 @@ def choose_rule(to_addresses, subject, from_addr, from_name, rules_cfg):
         match_cfg = rule.get("match", {}) or {}
         do_cfg = rule.get("do", {}) or {}
 
-        # Never ignore an unknown field: that would drop a condition.
-        for field in match_cfg:
-            if field not in MATCHERS:
-                raise RuleConfigError(
-                    unknown_match_field_message(index, rule_name, field)
-                )
+        problems = rule_problems(index, rule)
+        if problems:
+            raise RuleConfigError(problems[0])
 
         # Different fields are ANDed; values within a field are ORed.
         if not all(
@@ -622,7 +640,7 @@ def main():
 
     accounts = [{**cfg, "id": account_id} for account_id, cfg in accounts_all.items()]
 
-    # Reject unknown match fields before connecting to any account
+    # Reject invalid rules before connecting to any account
     problem_count = 0
     for account in accounts:
         account_rules = rules_all.get(account["id"])
@@ -631,8 +649,8 @@ def main():
             problem_count += 1
     if problem_count:
         log(
-            f"ERROR: {problem_count} unknown match field(s) in rules.local.json5; "
-            "no mail processed (supported fields: docs/rule-reference.md)"
+            f"ERROR: {problem_count} rule problem(s) in rules.local.json5; "
+            "no mail processed (see docs/rule-reference.md)"
         )
         sys.exit(1)
 

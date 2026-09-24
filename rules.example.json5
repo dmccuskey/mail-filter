@@ -7,7 +7,7 @@
   // A single string is treated as a one-item array.
   // Matching is case-insensitive.
   // to_* / to_local_* read the To header only.
-  // Unknown match fields stop the run; see docs/rule-reference.md.
+  // Unknown match fields and empty matches stop the run; see docs/rule-reference.md.
 
   "aerospace-account": {
     "rules": [

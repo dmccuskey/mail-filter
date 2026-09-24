@@ -193,7 +193,7 @@ Example:
 }
 ```
 
-The supported match fields are listed in the [Rule Reference](rule-reference.md). Before connecting to any account, the filter checks every account's rules; if any rule uses an unknown match field, it logs an error for each one (naming the account, rule, and field), processes no mail, and exits with status 1.
+The supported match fields are listed in the [Rule Reference](rule-reference.md). Before connecting to any account, the filter checks every account's rules; if any rule uses an unknown match field, has an empty `match`, or has a match field with no values, it logs an error for each problem (naming the account and rule), processes no mail, and exits with status 1. Use `catch_all` to act on every message no rule matches.
 
 An optional `catch_all` sits in the account next to `rules`, and applies only when no rule matches:
 

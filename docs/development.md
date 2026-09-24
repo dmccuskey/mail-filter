@@ -26,7 +26,7 @@ It currently:
 - processes unseen messages
 - evaluates ordered rules
 - supports the `to_*`, `to_local_*`, `from_email_*`, `from_name_*`, and `subject_*` match fields, each with `_is`, `_contains`, `_starts_with`, and `_ends_with` (recipient fields read the `To` header only)
-- rejects unknown match fields before connecting to any account
+- rejects invalid rules (unknown match fields, empty matches) before connecting to any account
 - supports `move`
 - supports `trash` (to the optional `trash` mapping, otherwise the server-advertised `\Trash` mailbox)
 - supports `delete`

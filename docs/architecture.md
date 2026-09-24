@@ -80,7 +80,7 @@ services_payments
 
 This keeps matching logic separate from the physical mailbox structure.
 
-Before any account is processed, every account's rules are checked. If any rule uses an unknown match field, the filter logs every one (account, rule number and name, field), processes no mail, and exits with status 1 before any connection is made. A misspelled field can therefore never silently drop a condition (see [Rule Reference](rule-reference.md#unknown-match-fields)).
+Before any account is processed, every account's rules are checked. If any rule uses an unknown match field, has an empty `match`, or has a match field with no values, the filter logs every problem (account, rule number and name, detail), processes no mail, and exits with status 1 before any connection is made. A misspelled or empty field can therefore never silently drop a condition, and a rule can never match every message by accident; `catch_all` is the only way to do that (see [Rule Reference](rule-reference.md#invalid-rules)).
 
 ## Account Processing
 

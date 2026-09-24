@@ -10,7 +10,7 @@
 | `from_name_*` | sender's decoded display name | `from_name_is` | `from_name_contains` | `from_name_starts_with` | `from_name_ends_with` |
 | `subject_*` | decoded subject | `subject_is` | `subject_contains` | `subject_starts_with` | `subject_ends_with` |
 
-These 20 names are the only supported match fields. Matching is case-insensitive. Any other name in `match` is an error that stops the run (see [Unknown match fields](#unknown-match-fields)).
+These 20 names are the only supported match fields. Matching is case-insensitive. Any other name in `match` is an error that stops the run (see [Invalid Rules](#invalid-rules)).
 
 ## Rule Structure
 
@@ -109,7 +109,7 @@ Every match field accepts either a list or a single string. A single string is t
 
 A single string is always one value. It is never split into characters or words. To match any of several values, use a list.
 
-An empty list adds no condition.
+An empty list, or a list of only empty strings, is an error (see [Invalid Rules](#invalid-rules)). Empty strings next to real values are ignored.
 
 ## Recipient Fields
 
@@ -202,16 +202,27 @@ A message with no display name has an empty name, so it matches no `from_name_*`
 
 `subject_is` must match the whole subject, so `"subject_is": "Hello"` does not match `Hello there`.
 
-## Unknown Match Fields
+## Invalid Rules
 
-Before connecting to any account, the filter checks every rule in `rules.local.json5`. If any rule uses a match field not in the quick reference above, the filter logs one error line per unknown field, naming the account, the rule, and the field, then exits with status 1. For example:
+Before connecting to any account, the filter checks every rule in `rules.local.json5`. A rule is invalid if:
+
+- it uses a match field not in the quick reference above;
+- its `match` is missing, `null`, or `{}` (an empty match would match every message);
+- a match field has no values: `[]`, `""`, or only empty strings.
+
+The filter logs one error line per problem, naming the account and the rule, then exits with status 1. For example:
 
 ```text
 [2026-09-23 09:15:02] [gmail-main] ERROR: rule #1 'GitHub mail' uses unknown match field 'from_contains'
-[2026-09-23 09:15:02] ERROR: 1 unknown match field(s) in rules.local.json5; no mail processed (supported fields: docs/rule-reference.md)
+[2026-09-23 09:15:02] ERROR: 1 rule problem(s) in rules.local.json5; no mail processed (see docs/rule-reference.md)
 ```
 
-Every unknown field in every account is reported in the same run. No mail is processed in that run. An unknown field is never skipped, because skipping it would drop a condition and let the rule match mail it should not.
+```text
+[2026-09-23 09:15:02] [gmail-main] ERROR: rule #2 'Oops' has an empty match; use catch_all to act on every unmatched message
+[2026-09-23 09:15:02] [gmail-main] ERROR: rule #3 'Receipts' has no values for match field 'subject_contains'
+```
+
+Every problem in every account is reported in the same run. No mail is processed in that run. An unknown or empty field is never skipped, because skipping it would drop a condition and let the rule match mail it should not. To act on every message no rule matches, use [`catch_all`](#catch-all).
 
 There are no aliases. Earlier versions used different names, which are now errors:
 
@@ -338,6 +349,8 @@ An account can define:
 ```
 
 If no normal rule matches, the catch-all action is returned.
+
+Use `catch_all`, not a rule with an empty `match`, to act on every unmatched message. A rule with an empty `match` is an error (see [Invalid Rules](#invalid-rules)).
 
 If there is no matching rule and no catch-all, the message is left untouched.
 

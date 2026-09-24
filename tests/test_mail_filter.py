@@ -144,6 +144,11 @@ def rule(match, do, name="r"):
     return {"name": name, "match": match, "do": do}
 
 
+# Matches every test message: raw_message always has a sender address.
+# (An empty match is a config error.)
+ANY = {"from_email_contains": "@"}
+
+
 class ProcessAccountUidTests(unittest.TestCase):
 
     def test_search_and_fetch_use_uids(self):
@@ -261,7 +266,7 @@ class GenericTrashTests(unittest.TestCase):
 
     def test_trash_with_mark_read(self):
         fake = FakeIMAP({b"42": raw_message(subject="Spam offer")})
-        run_account(fake, {"rules": [rule({}, {"trash": True, "mark_read": True})]},
+        run_account(fake, {"rules": [rule(ANY, {"trash": True, "mark_read": True})]},
                     folders=TRASH_FOLDERS)
 
         self.assertEqual(fake.message_calls(), [
@@ -272,7 +277,7 @@ class GenericTrashTests(unittest.TestCase):
 
     def test_trash_without_mapping_or_server_trash_leaves_message_untouched(self):
         fake = FakeIMAP({b"42": raw_message(subject="Spam offer")})
-        run_account(fake, {"rules": [rule({}, {"trash": True, "mark_read": True})]})
+        run_account(fake, {"rules": [rule(ANY, {"trash": True, "mark_read": True})]})
 
         self.assertEqual(fake.message_calls(), [])
         self.assertNotIn(("EXPUNGE",), fake.calls)
@@ -280,7 +285,7 @@ class GenericTrashTests(unittest.TestCase):
     def test_trash_is_not_delete(self):
         # trash never marks the source deleted without a successful copy first
         fake = FakeIMAP({b"42": raw_message(subject="Spam offer")}, copy_status="NO")
-        run_account(fake, {"rules": [rule({}, {"trash": True})]}, folders=TRASH_FOLDERS)
+        run_account(fake, {"rules": [rule(ANY, {"trash": True})]}, folders=TRASH_FOLDERS)
 
         self.assertEqual(fake.message_calls(), [("UID", "COPY", b"42", '"INBOX.Trash"')])
         self.assertNotIn(("EXPUNGE",), fake.calls)
@@ -290,7 +295,7 @@ class GenericSafetyTests(unittest.TestCase):
 
     def test_move_without_folder_mapping_leaves_message_untouched(self):
         fake = FakeIMAP({b"42": raw_message(to="shop-a@example.com")})
-        run_account(fake, {"rules": [rule({}, {"move": "missing", "mark_read": True})]})
+        run_account(fake, {"rules": [rule(ANY, {"move": "missing", "mark_read": True})]})
 
         self.assertEqual(fake.message_calls(), [])
         self.assertNotIn(("EXPUNGE",), fake.calls)
@@ -298,7 +303,7 @@ class GenericSafetyTests(unittest.TestCase):
     def test_failed_deleted_flag_skips_expunge(self):
         fake = FakeIMAP({b"42": raw_message(to="shop-a@example.com")},
                         failing_stores=[DELETED])
-        run_account(fake, {"rules": [rule({}, {"move": "shop"})]})
+        run_account(fake, {"rules": [rule(ANY, {"move": "shop"})]})
 
         self.assertEqual(fake.message_calls(), [
             ("UID", "COPY", b"42", '"Shopping"'),
@@ -314,14 +319,14 @@ class GenericSafetyTests(unittest.TestCase):
 
     def test_delete_expunges_after_loop(self):
         fake = FakeIMAP({b"42": raw_message(subject="Spam offer")})
-        run_account(fake, {"rules": [rule({}, {"delete": True})]})
+        run_account(fake, {"rules": [rule(ANY, {"delete": True})]})
 
         self.assertEqual(fake.message_calls(), [("UID", "STORE", b"42") + DELETED])
         self.assertEqual(fake.calls[-1], ("EXPUNGE",))
 
     def test_dry_run_trash_does_nothing(self):
         fake = FakeIMAP({b"42": raw_message(subject="Spam offer")})
-        run_account(fake, {"rules": [rule({}, {"trash": True, "mark_read": True})]},
+        run_account(fake, {"rules": [rule(ANY, {"trash": True, "mark_read": True})]},
                     folders=TRASH_FOLDERS, dry_run=True)
 
         self.assertEqual(fake.message_calls(), [])
@@ -352,7 +357,7 @@ class GmailTests(unittest.TestCase):
 
     def test_move_with_mark_read(self):
         fake = FakeIMAP({b"42": raw_message()}, gmail=True)
-        run_account(fake, {"rules": [rule({}, {"move": "github", "mark_read": True})]},
+        run_account(fake, {"rules": [rule(ANY, {"move": "github", "mark_read": True})]},
                     folders=GMAIL_FOLDERS)
 
         self.assertEqual(fake.message_calls(), [
@@ -364,7 +369,7 @@ class GmailTests(unittest.TestCase):
 
     def test_trash_copies_to_configured_trash_and_removes_inbox(self):
         fake = FakeIMAP({b"42": raw_message(subject="Spam offer")}, gmail=True)
-        run_account(fake, {"rules": [rule({}, {"trash": True})]}, folders=GMAIL_FOLDERS)
+        run_account(fake, {"rules": [rule(ANY, {"trash": True})]}, folders=GMAIL_FOLDERS)
 
         self.assertEqual(fake.message_calls(), [
             ("UID", "COPY", b"42", '"[Gmail]/Trash"'),
@@ -374,14 +379,14 @@ class GmailTests(unittest.TestCase):
 
     def test_trash_without_mapping_or_server_trash_leaves_message_untouched(self):
         fake = FakeIMAP({b"42": raw_message()}, gmail=True)
-        run_account(fake, {"rules": [rule({}, {"trash": True})]}, folders={"github": "GitHub"})
+        run_account(fake, {"rules": [rule(ANY, {"trash": True})]}, folders={"github": "GitHub"})
 
         self.assertEqual(fake.message_calls(), [])
         self.assertNotIn(("EXPUNGE",), fake.calls)
 
     def test_copy_failure_keeps_inbox_label(self):
         fake = FakeIMAP({b"42": raw_message()}, gmail=True, copy_status="NO")
-        run_account(fake, {"rules": [rule({}, {"move": "github"})]}, folders=GMAIL_FOLDERS)
+        run_account(fake, {"rules": [rule(ANY, {"move": "github"})]}, folders=GMAIL_FOLDERS)
 
         self.assertEqual(fake.message_calls(), [("UID", "COPY", b"42", '"GitHub"')])
         self.assert_never_deleted(fake)
@@ -389,7 +394,7 @@ class GmailTests(unittest.TestCase):
     def test_label_removal_failure_never_falls_back_to_deleted(self):
         fake = FakeIMAP({b"42": raw_message(), b"43": raw_message()}, gmail=True,
                         failing_stores=[REMOVE_INBOX])
-        run_account(fake, {"rules": [rule({}, {"trash": True})]}, folders=GMAIL_FOLDERS)
+        run_account(fake, {"rules": [rule(ANY, {"trash": True})]}, folders=GMAIL_FOLDERS)
 
         self.assertEqual(fake.message_calls(), [
             ("UID", "COPY", b"42", '"[Gmail]/Trash"'),
@@ -401,7 +406,7 @@ class GmailTests(unittest.TestCase):
 
     def test_delete_keeps_deleted_and_expunge_semantics(self):
         fake = FakeIMAP({b"42": raw_message()}, gmail=True)
-        run_account(fake, {"rules": [rule({}, {"delete": True})]}, folders=GMAIL_FOLDERS)
+        run_account(fake, {"rules": [rule(ANY, {"delete": True})]}, folders=GMAIL_FOLDERS)
 
         self.assertEqual(fake.message_calls(), [("UID", "STORE", b"42") + DELETED])
         self.assertEqual(fake.calls[-1], ("EXPUNGE",))
@@ -487,7 +492,7 @@ class TrashResolutionTests(unittest.TestCase):
 
     def test_generic_uses_server_trash_without_mapping(self):
         fake = FakeIMAP({b"42": raw_message(), b"43": raw_message()}, mailboxes=DOVECOT_LIST)
-        run_account(fake, {"rules": [rule({}, {"trash": True})]})
+        run_account(fake, {"rules": [rule(ANY, {"trash": True})]})
 
         self.assertEqual(fake.message_calls(), [
             ("UID", "COPY", b"42", '"INBOX.Trash"'),
@@ -501,7 +506,7 @@ class TrashResolutionTests(unittest.TestCase):
 
     def test_gmail_uses_server_trash_without_mapping(self):
         fake = FakeIMAP({b"42": raw_message()}, gmail=True, mailboxes=GMAIL_LIST)
-        run_account(fake, {"rules": [rule({}, {"trash": True})]}, folders={"github": "GitHub"})
+        run_account(fake, {"rules": [rule(ANY, {"trash": True})]}, folders={"github": "GitHub"})
 
         self.assertEqual(fake.message_calls(), [
             ("UID", "COPY", b"42", '"[Gmail]/Trash"'),
@@ -511,7 +516,7 @@ class TrashResolutionTests(unittest.TestCase):
 
     def test_mapping_overrides_server_trash_and_skips_list(self):
         fake = FakeIMAP({b"42": raw_message()}, mailboxes=DOVECOT_LIST)
-        run_account(fake, {"rules": [rule({}, {"trash": True})]},
+        run_account(fake, {"rules": [rule(ANY, {"trash": True})]},
                     folders={**FOLDERS, "trash": "INBOX.Deleted Items"})
 
         self.assertEqual(fake.message_calls()[0], ("UID", "COPY", b"42", '"INBOX.Deleted Items"'))
@@ -522,18 +527,18 @@ class TrashResolutionTests(unittest.TestCase):
                         mailboxes=DOVECOT_LIST)
         run_account(fake, {"rules": [
             rule({"subject_contains": "spam"}, {"trash": True}),
-            rule({}, {"move": "shop"}),
+            rule(ANY, {"move": "shop"}),
         ]})
         self.assertEqual(len(self.list_calls(fake)), 1)
 
         fake = FakeIMAP({b"42": raw_message()}, mailboxes=DOVECOT_LIST)
-        run_account(fake, {"rules": [rule({}, {"move": "shop"})]})
+        run_account(fake, {"rules": [rule(ANY, {"move": "shop"})]})
         self.assertEqual(self.list_calls(fake), [])
 
     def test_list_failure_skips_trash_safely(self):
         fake = FakeIMAP({b"42": raw_message(subject="Hi")}, mailboxes=[b"denied"],
                         list_status="NO")
-        output = run_account(fake, {"rules": [rule({}, {"trash": True, "mark_read": True},
+        output = run_account(fake, {"rules": [rule(ANY, {"trash": True, "mark_read": True},
                                                    name="Rule A")]})
 
         self.assertEqual(fake.message_calls(), [])
@@ -543,14 +548,14 @@ class TrashResolutionTests(unittest.TestCase):
     def test_ambiguous_server_trash_skips_safely(self):
         fake = FakeIMAP({b"42": raw_message()}, gmail=True,
                         mailboxes=GMAIL_LIST + [b'(\\Trash) "/" "Old Trash"'])
-        run_account(fake, {"rules": [rule({}, {"trash": True})]}, folders={"github": "GitHub"})
+        run_account(fake, {"rules": [rule(ANY, {"trash": True})]}, folders={"github": "GitHub"})
 
         self.assertEqual(fake.message_calls(), [])
         self.assertNotIn(("EXPUNGE",), fake.calls)
 
     def test_dry_run_resolves_but_does_not_modify(self):
         fake = FakeIMAP({b"42": raw_message()}, mailboxes=DOVECOT_LIST)
-        output = run_account(fake, {"rules": [rule({}, {"trash": True})]}, dry_run=True)
+        output = run_account(fake, {"rules": [rule(ANY, {"trash": True})]}, dry_run=True)
 
         self.assertEqual(fake.message_calls(), [])
         self.assertIn("→ Trash (INBOX.Trash) [DRY_RUN]", output)
@@ -563,7 +568,7 @@ class ProviderUnknownTests(unittest.TestCase):
         for do in ({"move": "shop", "mark_read": True}, {"trash": True, "mark_read": True}):
             with self.subTest(do=do):
                 fake = FakeIMAP({b"42": raw_message()}, capability_status="NO")
-                run_account(fake, {"rules": [rule({}, do)]}, folders=TRASH_FOLDERS)
+                run_account(fake, {"rules": [rule(ANY, do)]}, folders=TRASH_FOLDERS)
 
                 self.assertEqual(fake.message_calls(), [])
                 self.assertNotIn(("EXPUNGE",), fake.calls)
@@ -571,14 +576,14 @@ class ProviderUnknownTests(unittest.TestCase):
     def test_capability_exception_skips_move(self):
         fake = FakeIMAP({b"42": raw_message()})
         fake.capability = mock.Mock(side_effect=mail_filter.imaplib.IMAP4.error("boom"))
-        run_account(fake, {"rules": [rule({}, {"move": "shop"})]})
+        run_account(fake, {"rules": [rule(ANY, {"move": "shop"})]})
 
         self.assertEqual(fake.message_calls(), [])
         self.assertNotIn(("EXPUNGE",), fake.calls)
 
     def test_delete_is_unaffected(self):
         fake = FakeIMAP({b"42": raw_message()}, capability_status="NO")
-        run_account(fake, {"rules": [rule({}, {"delete": True})]})
+        run_account(fake, {"rules": [rule(ANY, {"delete": True})]})
 
         self.assertEqual(fake.message_calls(), [("UID", "STORE", b"42") + DELETED])
         self.assertEqual(fake.calls[-1], ("EXPUNGE",))
@@ -622,7 +627,7 @@ class LogFormatTests(unittest.TestCase):
 
     def line_for(self, do, folders=FOLDERS, dry_run=False, **fake_kwargs):
         fake = FakeIMAP({b"42": raw_message(subject="Hi")}, **fake_kwargs)
-        output = run_account(fake, {"rules": [rule({}, do, name="Rule A")]},
+        output = run_account(fake, {"rules": [rule(ANY, do, name="Rule A")]},
                              folders=folders, dry_run=dry_run)
         lines = message_lines(output)
         self.assertEqual(len(lines), 1, output)
@@ -705,14 +710,14 @@ class LogFormatTests(unittest.TestCase):
 
     def test_uids_are_logged_as_hash_numbers_not_bytes(self):
         fake = FakeIMAP({b"16186": raw_message()})
-        output = run_account(fake, {"rules": [rule({}, {"move": "shop"})]})
+        output = run_account(fake, {"rules": [rule(ANY, {"move": "shop"})]})
         self.assertIn(" MATCHED #16186 ", output)
         self.assertNotIn("b'", output)
 
     def test_rule_name_is_never_bracketed(self):
         fake = FakeIMAP({b"42": raw_message()})
         output = run_account(fake, {"rules": [
-            rule({}, {"move": "shop", "delete": True}, name="odd, error"),
+            rule(ANY, {"move": "shop", "delete": True}, name="odd, error"),
         ]})
         self.assertNotIn("[odd, error]", output)
         self.assertIn("Warning: RULE='odd, error' has move with trash/delete; using move", output)
@@ -725,7 +730,7 @@ class MarkReadOnlyTests(unittest.TestCase):
         for gmail in (False, True):
             with self.subTest(gmail=gmail):
                 fake = FakeIMAP({b"42": raw_message()}, gmail=gmail)
-                run_account(fake, {"rules": [rule({}, {"mark_read": True})]})
+                run_account(fake, {"rules": [rule(ANY, {"mark_read": True})]})
 
                 self.assertEqual(fake.message_calls(), [("UID", "STORE", b"42") + SEEN])
                 self.assertNotIn(("EXPUNGE",), fake.calls)
@@ -739,27 +744,27 @@ class MarkReadOnlyTests(unittest.TestCase):
 
     def test_mark_read_false_does_nothing(self):
         fake = FakeIMAP({b"42": raw_message()})
-        run_account(fake, {"rules": [rule({}, {"mark_read": False})]})
+        run_account(fake, {"rules": [rule(ANY, {"mark_read": False})]})
 
         self.assertEqual(fake.message_calls(), [])
 
     def test_mark_read_only_works_when_provider_unknown(self):
         # \\Seen is not provider-specific, so a failed capability query does not block it
         fake = FakeIMAP({b"42": raw_message()}, capability_status="NO")
-        run_account(fake, {"rules": [rule({}, {"mark_read": True})]})
+        run_account(fake, {"rules": [rule(ANY, {"mark_read": True})]})
 
         self.assertEqual(fake.message_calls(), [("UID", "STORE", b"42") + SEEN])
 
     def test_failed_store_is_logged(self):
         fake = FakeIMAP({b"42": raw_message()}, failing_stores=[SEEN])
-        output = run_account(fake, {"rules": [rule({}, {"mark_read": True})]})
+        output = run_account(fake, {"rules": [rule(ANY, {"mark_read": True})]})
 
         self.assertEqual(fake.message_calls(), [("UID", "STORE", b"42") + SEEN])
         self.assertIn("SUBJECT='' FAILED: \\Seen not set (status=NO); left in INBOX\n", output)
 
     def test_dry_run_does_nothing(self):
         fake = FakeIMAP({b"42": raw_message()})
-        output = run_account(fake, {"rules": [rule({}, {"mark_read": True})]}, dry_run=True)
+        output = run_account(fake, {"rules": [rule(ANY, {"mark_read": True})]}, dry_run=True)
 
         self.assertEqual(fake.message_calls(), [])
         self.assertIn(" MARKED_READ [DRY_RUN]\n", output)
@@ -870,25 +875,25 @@ class ChooseRuleTests(unittest.TestCase):
         self.assertIsNone(self.choose(cfg, subject="Hello there"))
 
     def test_move_beats_delete(self):
-        cfg = {"rules": [rule({}, {"move": "x", "delete": True, "mark_read": True})]}
-        result = self.choose(cfg)
+        cfg = {"rules": [rule(ANY, {"move": "x", "delete": True, "mark_read": True})]}
+        result = self.choose(cfg, from_addr="a@example.com")
         self.assertEqual(result["move"], "x")
         self.assertFalse(result["trash"])
         self.assertFalse(result["delete"])
         self.assertTrue(result["mark_read"])
 
     def test_move_beats_trash(self):
-        result = self.choose({"rules": [rule({}, {"move": "x", "trash": True})]})
+        result = self.choose({"rules": [rule(ANY, {"move": "x", "trash": True})]}, from_addr="a@example.com")
         self.assertEqual(result["move"], "x")
         self.assertFalse(result["trash"])
 
     def test_trash_beats_delete(self):
-        result = self.choose({"rules": [rule({}, {"trash": True, "delete": True})]})
+        result = self.choose({"rules": [rule(ANY, {"trash": True, "delete": True})]}, from_addr="a@example.com")
         self.assertTrue(result["trash"])
         self.assertFalse(result["delete"])
 
     def test_trash_keeps_mark_read(self):
-        result = self.choose({"rules": [rule({}, {"trash": True, "mark_read": True})]})
+        result = self.choose({"rules": [rule(ANY, {"trash": True, "mark_read": True})]}, from_addr="a@example.com")
         self.assertEqual(result, {"name": "r", "move": None, "trash": True,
                                   "delete": False, "mark_read": True})
 
@@ -933,8 +938,47 @@ class ValidateRulesTests(unittest.TestCase):
 
     def test_valid_rules_pass(self):
         cfg = {"rules": [rule({m: "x" for m in mail_filter.MATCHERS}, {"move": "x"}),
-                         rule({}, {"delete": True}), {"name": "no match key", "do": {}}]}
+                         rule(ANY, {"delete": True}),
+                         rule({"subject_contains": ["", "foo"]}, {"move": "x"})]}
         self.assertEqual(mail_filter.validate_rules(cfg), [])
+
+    def test_empty_match_rejected(self):
+        for match in (None, {}):
+            with self.subTest(match=match):
+                cfg = {"rules": [rule(match, {"delete": True}, name="Oops")]}
+                self.assertEqual(mail_filter.validate_rules(cfg), [
+                    "rule #1 'Oops' has an empty match; "
+                    "use catch_all to act on every unmatched message",
+                ])
+        cfg = {"rules": [{"name": "No match key", "do": {"delete": True}}]}
+        self.assertEqual(len(mail_filter.validate_rules(cfg)), 1)
+
+    def test_empty_field_values_rejected(self):
+        for values in ([], "", [""], None):
+            with self.subTest(values=values):
+                cfg = {"rules": [rule({**ANY, "subject_contains": values}, {"move": "x"})]}
+                self.assertEqual(mail_filter.validate_rules(cfg), [
+                    "rule #1 'r' has no values for match field 'subject_contains'",
+                ])
+
+    def test_unknown_and_empty_fields_both_reported(self):
+        cfg = {"rules": [rule({"to": "me", "subject_contains": []}, {"move": "x"})]}
+        self.assertEqual(mail_filter.validate_rules(cfg), [
+            "rule #1 'r' uses unknown match field 'to'",
+            "rule #1 'r' has no values for match field 'subject_contains'",
+        ])
+
+    def test_choose_rule_raises_on_empty_match(self):
+        cfg = {"rules": [rule({}, {"delete": True}, name="Oops")]}
+        with self.assertRaises(mail_filter.RuleConfigError) as ctx:
+            mail_filter.choose_rule(["me@example.com"], "s", "a@b.c", "", cfg)
+        self.assertIn("'Oops' has an empty match", str(ctx.exception))
+
+    def test_catch_all_needs_no_match(self):
+        cfg = {"rules": [rule(ANY, {"move": "x"})], "catch_all": {"move": "archive"}}
+        self.assertEqual(mail_filter.validate_rules(cfg), [])
+        cfg = {"rules": [], "catch_all": {"move": "archive"}}
+        self.assertEqual(mail_filter.choose_rule([], "", "", "", cfg)["name"], "<catch_all>")
 
     def test_reports_every_unknown_field(self):
         cfg = {"rules": [rule({"subject_contains": "a"}, {"move": "x"}, name="Fine"),
@@ -960,7 +1004,27 @@ class ValidateRulesTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
         self.assertIn("] [test] ERROR: rule #1 'r' uses unknown match field 'to_prefix'\n",
                       out.getvalue())
-        self.assertIn("ERROR: 1 unknown match field(s) in rules.local.json5; no mail processed",
+        self.assertIn("ERROR: 1 rule problem(s) in rules.local.json5; no mail processed",
+                      out.getvalue())
+        self.assertNotIn("Traceback", out.getvalue())
+
+    def test_main_rejects_empty_match_before_connecting(self):
+        configs = {
+            "accounts.local.json5": {"test": ACCOUNT_CFG},
+            "folders.local.json5": {"test": FOLDERS},
+            "rules.local.json5": {"test": {"rules": [{"name": "oops", "do": {"delete": True}}]}},
+        }
+        connect = mock.Mock(side_effect=AssertionError("connected despite bad rules"))
+        with mock.patch.object(mail_filter, "load_json", lambda path: configs[Path(path).name]), \
+                mock.patch.object(mail_filter.imaplib, "IMAP4_SSL", connect), \
+                redirect_stdout(io.StringIO()) as out:
+            with self.assertRaises(SystemExit) as ctx:
+                mail_filter.main()
+        connect.assert_not_called()
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("] [test] ERROR: rule #1 'oops' has an empty match; "
+                      "use catch_all to act on every unmatched message\n", out.getvalue())
+        self.assertIn("ERROR: 1 rule problem(s) in rules.local.json5; no mail processed",
                       out.getvalue())
         self.assertNotIn("Traceback", out.getvalue())
 

@@ -14,7 +14,7 @@ Mail Filter connects to one or more IMAP accounts, evaluates unseen messages aga
 - Sender email-address and display-name matching
 - MIME-decoded subject matching
 - Exact, substring, prefix, and suffix matching for every field
-- Unknown match fields rejected at startup
+- Invalid rules (unknown match fields, empty matches) rejected at startup
 - Move, delete, and mark-read actions
 - Optional catch-all routing
 - Dry-run support
