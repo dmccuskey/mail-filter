@@ -20,8 +20,8 @@ The current implementation is the known-good live baseline.
 
 It currently:
 
-- supports multiple IMAP accounts, each of which can be turned off with `mail_enabled`
-- uses JSON5 configuration
+- supports multiple IMAP accounts, each of which can be turned off with `mail_enabled` or run without changing anything with `dry_run`
+- uses JSON5 configuration, parsed by a bundled copy of `json5` (`vendor/`), so nothing needs to be installed
 - uses logical folder mappings
 - processes unseen messages
 - unfolds folded headers before matching and logging
