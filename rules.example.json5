@@ -9,7 +9,7 @@
   // to_* / to_local_* read the To header only.
   // Unknown match fields and empty matches stop the run; see docs/rule-reference.md.
 
-  "aerospace-account": {
+  "aerospace.biz": {
     "rules": [
       {
         "name": "Health messages",
@@ -39,7 +39,7 @@
     },
   },
 
-  "gmail-main": {
+  "gmail-personal": {
     "rules": [
       {
         "name": "GitHub mail",

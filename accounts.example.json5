@@ -7,16 +7,16 @@
   // Optional "dry_run": true logs what each rule would do without changing
   // anything on the server (default false).
   
-  "aerospace-account": {
+  "aerospace.biz": {
     "imap_host": "premium147.web-hosting.com",
     "username": "inbox@aerospace.biz",
     "password": "REPLACE_WITH_PASSWORD"
   },
 
-  "gmail-main": {
+  "gmail-personal": {
     "imap_host": "imap.gmail.com",
     "username": "your-address@gmail.com",
-    "password_env": "MAILFILTER_PW_GMAIL_MAIN",
+    "password_env": "MAILFILTER_PW_GMAIL_PERSONAL",
     "mail_enabled": false
   }
 }

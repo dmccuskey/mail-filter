@@ -213,13 +213,13 @@ Before connecting to any account, the filter checks every rule in `rules.local.j
 The filter logs one error line per problem, naming the account and the rule, then exits with status 1. For example:
 
 ```text
-[2026-09-23 09:15:02] [gmail-main] ERROR: rule #1 'GitHub mail' uses unknown match field 'from_contains'
+[2026-09-23 09:15:02] [gmail-personal] ERROR: rule #1 'GitHub mail' uses unknown match field 'from_contains'
 [2026-09-23 09:15:02] ERROR: 1 rule problem(s) in rules.local.json5; no mail processed (see docs/rule-reference.md)
 ```
 
 ```text
-[2026-09-23 09:15:02] [gmail-main] ERROR: rule #2 'Oops' has an empty match; use catch_all to act on every unmatched message
-[2026-09-23 09:15:02] [gmail-main] ERROR: rule #3 'Receipts' has no values for match field 'subject_contains'
+[2026-09-23 09:15:02] [gmail-personal] ERROR: rule #2 'Oops' has an empty match; use catch_all to act on every unmatched message
+[2026-09-23 09:15:02] [gmail-personal] ERROR: rule #3 'Receipts' has no values for match field 'subject_contains'
 ```
 
 Every problem in every account is reported in the same run. No mail is processed in that run. An unknown or empty field is never skipped, because skipping it would drop a condition and let the rule match mail it should not. To act on every message no rule matches, use [`catch_all`](#catch-all).

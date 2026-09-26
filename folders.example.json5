@@ -8,7 +8,7 @@
   // server advertises with \Trash. Set it to override that, or for a server
   // that does not advertise \Trash.
 
-  "aerospace-account": {
+  "aerospace.biz": {
     "inbox": "INBOX",
     "health_delete": "INBOX.Health.To Delete",
     "services_payments": "INBOX.Services.Payments",
@@ -16,7 +16,7 @@
     "trash": "INBOX.Trash"
   },
 
-  "gmail-main": {
+  "gmail-personal": {
     "inbox": "INBOX",
     "github_main": "GitHub",
     "promotions": "[Gmail]/Promotions",

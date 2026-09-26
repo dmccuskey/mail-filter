@@ -136,9 +136,9 @@ Run them after every change. They report the live tests as skipped; `unittest di
 ### Live IMAP Tests
 
 ```bash
-python3 imap_tests.py                    # every account with test_enabled
-python3 imap_tests.py gmail-main         # only the accounts named
-python3 imap_tests.py --keep gmail-main  # leave the results on the server to inspect
+python3 imap_tests.py                        # every account with test_enabled
+python3 imap_tests.py gmail-personal         # only the accounts named
+python3 imap_tests.py --keep gmail-personal  # leave the results on the server to inspect
 ```
 
 The tests use the accounts in `accounts.local.json5`. Every account is tested unless it sets `"test_enabled": false` (see [`test_enabled`](configuration.md#test_enabled)); `mail_enabled` does not matter, so an account kept only for testing can set `"mail_enabled": false`. The rules and folders files are not used: the tests bring their own rules. Source the secrets file first if accounts use `password_env`.
