@@ -86,6 +86,8 @@ Example:
 
 This causes the filter to run every five minutes.
 
+For macOS (cron or launchd) and Windows (Task Scheduler), see [Installation](installation.md).
+
 If any account uses `password_env`, the cron line must also load the variables; see [Passwords from Environment Variables](#passwords-from-environment-variables).
 
 If `rules.local.json5` has an invalid rule, every cron run logs the startup rule errors and exits with status 1 without processing mail, until the rules are fixed.
