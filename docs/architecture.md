@@ -177,7 +177,7 @@ WHEN message matches these conditions
 THEN perform this action
 ```
 
-`DRY_RUN` is available to test behavior without performing destructive actions.
+An account's `"dry_run": true` setting tests its rules without changing anything on the server; see [Dry Run](operations.md#dry-run).
 
 ## Design History
 

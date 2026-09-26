@@ -18,7 +18,7 @@ Mail Filter connects to one or more IMAP accounts, evaluates unseen messages aga
 - Move, trash, delete, and mark-read actions
 - Per-account on/off switch (`mail_enabled`)
 - Optional catch-all routing
-- Dry-run support
+- Per-account dry run (`"dry_run": true`)
 - Live IMAP tests against your own servers (`imap_tests.py`)
 - Raspberry Pi / cron deployment
 
@@ -108,7 +108,7 @@ The project intentionally keeps those changes separate so the current live filte
 
 This software operates on real email.
 
-Use `DRY_RUN = True` when developing or modifying rules, and create a Git checkpoint before making behavior-changing IMAP changes.
+Set `"dry_run": true` on an account when developing or modifying its rules, and create a Git checkpoint before making behavior-changing IMAP changes.
 
 ## License
 

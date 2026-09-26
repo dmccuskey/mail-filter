@@ -25,25 +25,24 @@ Before connecting to any account, the filter checks the rules of every enabled a
 [2026-09-23 16:09:44] ERROR: 1 rule problem(s) in rules.local.json5; no mail processed (see docs/rule-reference.md)
 ```
 
-All problems in all accounts are reported in one run, so they can be fixed together. After editing `rules.local.json5`, run the filter once by hand (ideally with `DRY_RUN = True`) to confirm the check passes. See [Invalid Rules](rule-reference.md#invalid-rules).
+All problems in all accounts are reported in one run, so they can be fixed together. After editing `rules.local.json5`, run the filter once by hand (ideally with `"dry_run": true` on the account) to confirm the check passes. See [Invalid Rules](rule-reference.md#invalid-rules).
 
 ## Dry Run
 
-The script contains:
+To test an account's rules without changing its mail, set `dry_run` on the account in `accounts.local.json5`:
 
-```python
-DRY_RUN = False
+```json5
+"gmail-main": {
+  "imap_host": "imap.gmail.com",
+  "username": "your-address@gmail.com",
+  "password": "...",
+  "dry_run": true
+}
 ```
 
-Set this to:
+The filter still connects, searches, fetches, and matches, and logs one line per message, but moves, deletes, and marks nothing and never expunges. Each message line ends in ` [DRY_RUN]`, and the account logs `dry_run is true; no changes will be made on the server` when it connects.
 
-```python
-DRY_RUN = True
-```
-
-to test rule matching without performing move/delete side effects.
-
-Dry-run mode is particularly useful when changing rules.
+Dry run is set per account, so one account can be tried out while the others keep filtering. It is particularly useful for a new account and after changing rules. Remove the setting (or set it to `false`) to filter for real; see [`dry_run`](configuration.md#dry_run).
 
 ## Development Logging
 
@@ -148,7 +147,7 @@ The arrow `→` appears only when the message went somewhere. A `FAILED` outcome
 Extras follow the outcome:
 
 - ` (mark_read)`: the message was also marked read. ` (mark_read FAILED: status=NO)` means the main action succeeded but `\Seen` could not be set.
-- ` [DRY_RUN]`: `DRY_RUN` was on, so nothing on the server was changed. This is added to every per-message line in a dry run.
+- ` [DRY_RUN]`: the account has `"dry_run": true`, so nothing on the server was changed. This is added to every per-message line of a dry-run account.
 
 Examples:
 
@@ -163,6 +162,7 @@ Lines that are not about a single matched message keep an account-level form, fo
 
 ```text
 [2026-09-23 12:21:50] [mentalhijack-account] mail_enabled is false; skipping account
+[2026-09-23 12:21:50] [gmail-main] dry_run is true; no changes will be made on the server
 [2026-09-23 12:21:50] [gmail-main] ERROR: capability query failed; move and trash actions will be skipped
 [2026-09-23 12:21:50] [gmail-main] Trash mailbox: '[Gmail]/Trash' (server \Trash)
 [2026-09-23 12:21:50] [gmail-main] ERROR: fetch #16159 failed (status=NO)
@@ -263,7 +263,7 @@ Before changing filtering behavior:
 
 1. Commit the current known-good implementation.
 2. Make one logical change.
-3. Test with `DRY_RUN`.
+3. Test with `"dry_run": true` on the account.
 4. Run against a controlled set of messages if possible.
 5. Verify logs and resulting mail placement.
 6. Commit the verified change.

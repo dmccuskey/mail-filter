@@ -136,10 +136,10 @@ DELETED = ("+FLAGS", "(\\Deleted)")
 
 
 def run_account(fake, rules, folders=FOLDERS, dry_run=False):
+    account = {**ACCOUNT, "dry_run": True} if dry_run else ACCOUNT
     with mock.patch.object(mail_filter.imaplib, "IMAP4_SSL", fake), \
-            mock.patch.object(mail_filter, "DRY_RUN", dry_run), \
             redirect_stdout(io.StringIO()) as out:
-        mail_filter.process_account(ACCOUNT, folders, rules)
+        mail_filter.process_account(account, folders, rules)
     return out.getvalue()
 
 
@@ -1393,6 +1393,45 @@ class MailEnabledTests(unittest.TestCase):
                     "ERROR: account 'bad' has an invalid \"mail_enabled\"; "
                     "it must be true or false", out)
                 self.assertIn("ERROR: configuration format problem(s); no mail processed", out)
+
+
+class DryRunTests(unittest.TestCase):
+    """"dry_run": true in an account's config changes nothing on that account's server."""
+
+    DELETE = {"rules": [rule(ANY, {"delete": True})]}
+    DRY_LINE = "[test] dry_run is true; no changes will be made on the server"
+
+    def test_default_is_false(self):
+        self.assertFalse(mail_filter.is_dry_run(ACCOUNT_CFG))
+        self.assertFalse(mail_filter.is_dry_run({**ACCOUNT_CFG, "dry_run": False}))
+        self.assertTrue(mail_filter.is_dry_run({**ACCOUNT_CFG, "dry_run": True}))
+
+    def test_dry_run_account_is_logged(self):
+        output = run_account(FakeIMAP({b"42": raw_message()}), self.DELETE, dry_run=True)
+        self.assertIn(self.DRY_LINE, [line.split("] ", 1)[1] for line in output.splitlines()])
+
+    def test_live_account_is_not_logged(self):
+        output = run_account(FakeIMAP({b"42": raw_message()}), self.DELETE)
+        self.assertNotIn("dry_run", output)
+
+    def test_dry_and_live_accounts_are_independent(self):
+        dry = FakeIMAP({b"42": raw_message()})
+        live = FakeIMAP({b"42": raw_message()})
+        run_account(dry, self.DELETE, dry_run=True)
+        run_account(live, self.DELETE)
+        run_account(dry, self.DELETE, dry_run=True)
+        self.assertEqual(dry.message_calls(), [])
+        self.assertNotIn(("EXPUNGE",), dry.calls)
+        self.assertEqual(live.message_calls(), [("UID", "STORE", b"42") + DELETED])
+        self.assertEqual(live.calls[-1], ("EXPUNGE",))
+
+    def test_non_boolean_rejected(self):
+        for value in ("true", 1):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    mail_filter.validate_config_format(
+                        {"test": {**ACCOUNT_CFG, "dry_run": value}}, {}),
+                    ["account 'test' has an invalid \"dry_run\"; it must be true or false"])
 
 
 class TestMessageTests(unittest.TestCase):

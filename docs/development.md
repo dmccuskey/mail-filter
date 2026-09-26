@@ -72,7 +72,7 @@ Before implementation, each feature should be defined in terms of:
 
 Left open when the live IMAP tests were added ([issue #1](https://github.com/dmccuskey/mail-filter/issues/1)):
 
-- offline rule regression tests: check that the real `rules.local.json5` routes known messages to the expected rule, with one command and no server. Most useful for large or often-edited rule sets; with a small set, spotting a misrouted message in the mail client, moving it back to `INBOX`, and adjusting the rule with `DRY_RUN` works well.
+- offline rule regression tests: check that the real `rules.local.json5` routes known messages to the expected rule, with one command and no server. Most useful for large or often-edited rule sets; with a small set, spotting a misrouted message in the mail client, moving it back to `INBOX`, and adjusting the rule with `"dry_run": true` works well.
   - examples as a gitignored case file of `{from, to, subject}` and the expected rule (or none), run through `choose_rule()`;
   - or, closer to real mail, a gitignored folder of `.eml` files (for example dragged out of Apple Mail), which also tests header parsing on what senders actually send: `To` headers without your address, MIME-encoded subjects and names, folded headers;
   - the `.eml` version needs header parsing (recipients, decoded subject, sender name and address) moved out of `process_account()` into a helper.
@@ -221,7 +221,7 @@ For changes affecting message identity or deletion:
 2. Commit before modifying behavior.
 3. Run the unit tests.
 4. Run `python3 imap_tests.py --record` against a Gmail account and a non-Gmail account. Review the updated recordings ([Reviewing a Recording](#reviewing-a-recording)) and commit them.
-5. Test with `DRY_RUN` on the real rules where applicable.
+5. Test with `"dry_run": true` on the real rules where applicable.
 6. Commit after successful verification.
 
 ## Branches

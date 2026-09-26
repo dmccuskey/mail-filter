@@ -43,6 +43,7 @@ accounts.local.json5
    ├─ imap_host      string
    ├─ username       string
    ├─ mail_enabled   boolean   optional, default true
+   ├─ dry_run        boolean   optional, default false
    ├─ test_enabled   boolean   optional, default true
    └─ one of:
       ├─ password       string   the password itself
@@ -111,6 +112,16 @@ Optional; defaults to `true`. Set it to `false` to skip the account without remo
 ```
 
 The value must be `true` or `false`. Anything else, including the string `"false"`, is rejected at startup: the filter logs an `ERROR`, processes no mail, and exits with status 1.
+
+#### `dry_run`
+
+Optional; defaults to `false`. Set it to `true` to run the account's rules without changing anything on its server: messages are fetched and matched, and each one's log line shows what would have happened, ending in ` [DRY_RUN]`. Nothing is moved, deleted, or marked read, and nothing is expunged. Each run logs:
+
+```text
+[2026-09-25 10:12:03] [gmail-main] dry_run is true; no changes will be made on the server
+```
+
+Use it for a new account, or after changing rules; remove it (or set it to `false`) to start filtering for real. It applies to one account, so the others keep filtering normally. See [Dry Run](operations.md#dry-run). Like `mail_enabled`, the value must be `true` or `false`.
 
 #### `test_enabled`
 
