@@ -265,6 +265,4 @@ The separation provides:
 
 JSON5 is used instead of strict JSON to allow configuration comments and trailing commas.
 
-The script attempts to use the `json5` Python package and falls back to the standard JSON parser if the package is unavailable.
-
-The actual configuration files currently rely on JSON5 syntax, so JSON5 should be considered the intended format.
+Mail Filter includes its own copy of the `json5` Python package in `vendor/json5/`, so there is nothing to install. The bundled copy is always used, even when a `json5` package is installed, so every machine parses the configuration the same way. See [vendor/README.md](../vendor/README.md) for its version, license, and how to update it.
