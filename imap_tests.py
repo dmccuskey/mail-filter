@@ -2,13 +2,13 @@
 """
 Run the live IMAP tests against real servers (see docs/development.md#testing).
 
-  python3 imap_tests.py                   every account with test_enabled
-  python3 imap_tests.py gmail-main        only the accounts named
-  python3 imap_tests.py --keep gmail-main leave test messages and folders in place
-  python3 imap_tests.py --record          also save the filter's IMAP replies to
-                                          tests/fixtures/imap/ for offline replay
-  python3 imap_tests.py --check-recordings  check the recordings for identifying
-                                          details (no server is contacted)
+  python3 imap_tests.py                        every account with test_enabled
+  python3 imap_tests.py gmail-personal         only the accounts named
+  python3 imap_tests.py --keep gmail-personal  leave test messages and folders in place
+  python3 imap_tests.py --record               also save the filter's IMAP replies to
+                                               tests/fixtures/imap/ for offline replay
+  python3 imap_tests.py --check-recordings     check the recordings for identifying
+                                               details (no server is contacted)
 
 The tests create messages marked "[mail-filter testing only]" in each tested
 account's INBOX, run the filter on them, and then delete what they created.

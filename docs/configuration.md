@@ -54,15 +54,15 @@ Structure:
 
 ```json5
 {
-  "gmail-main": {
+  "gmail-personal": {
     "imap_host": "imap.gmail.com",
     "username": "username@gmail.com",
     "password": "password"
   },
-  "work": {
-    "imap_host": "imap.example.com",
-    "username": "me@example.com",
-    "password_env": "MAILFILTER_PW_WORK"
+  "fastmail.com": {
+    "imap_host": "imap.fastmail.com",
+    "username": "me@fastmail.com",
+    "password_env": "MAILFILTER_PW_FASTMAIL"
   }
 }
 ```
@@ -73,15 +73,14 @@ Structure:
 
 Unique internal identifier for the account.
 
-The ID is the key of the account's entry, and the same key selects the account's folder and rule configuration.
+The ID is the key of the account's entry, and the same key selects the account's folder and rule configuration. It appears in every log line, so a short, readable ID works best. Any name works; some common styles:
 
-Examples:
-
-```text
-gmail-main
-aerospace-account
-fastmail-main
-```
+| Style | Examples |
+|---|---|
+| Provider and purpose | `gmail-personal`, `gmail-work` |
+| Domain | `fastmail.com`, `aerospace.biz` |
+| Purpose only | `newsletters`, `shopping` |
+| Person | `alex`, `family` |
 
 #### `imap_host`
 
@@ -108,7 +107,7 @@ Each account sets exactly one of `password` or `password_env`, and accounts can 
 Optional; defaults to `true`. Set it to `false` to skip the account without removing its entry. A disabled account is not connected to, and its password and rules are not checked at startup, so an account that is broken or only partly set up can be disabled without stopping the others. Each run logs:
 
 ```text
-[2026-09-23 19:24:47] [mentalhijack-account] mail_enabled is false; skipping account
+[2026-09-23 19:24:47] [newsletters] mail_enabled is false; skipping account
 ```
 
 The value must be `true` or `false`. Anything else, including the string `"false"`, is rejected at startup: the filter logs an `ERROR`, processes no mail, and exits with status 1.
@@ -118,7 +117,7 @@ The value must be `true` or `false`. Anything else, including the string `"false
 Optional; defaults to `false`. Set it to `true` to run the account's rules without changing anything on its server: messages are fetched and matched, and each one's log line shows what would have happened, ending in ` [DRY_RUN]`. Nothing is moved, deleted, or marked read, and nothing is expunged. Each run logs:
 
 ```text
-[2026-09-25 10:12:03] [gmail-main] dry_run is true; no changes will be made on the server
+[2026-09-25 10:12:03] [gmail-personal] dry_run is true; no changes will be made on the server
 ```
 
 Use it for a new account, or after changing rules; remove it (or set it to `false`) to start filtering for real. It applies to one account, so the others keep filtering normally. See [Dry Run](operations.md#dry-run). Like `mail_enabled`, the value must be `true` or `false`.
@@ -144,7 +143,7 @@ Example:
 
 ```json5
 {
-  "aerospace-account": {
+  "aerospace.biz": {
     "services_payments": "INBOX.Services.Payments",
     "services_to_review": "INBOX.Services.To Review"
   }
@@ -214,13 +213,13 @@ Example:
 
 ```json5
 {
-  "aerospace-account": {
+  "aerospace.biz": {
     "rules": [
       {
-        "name": "Boulder Parks Auto Renewal",
+        "name": "Gym membership renewal",
         "match": {
-          "to_local_is": ["my-boulderparknrecs"],
-          "subject_contains": ["membership auto renewal"]
+          "to_local_is": ["gym"],
+          "subject_contains": ["membership renewal"]
         },
         "do": {
           "move": "services_payments"
@@ -237,7 +236,7 @@ An optional `catch_all` sits in the account next to `rules`, and applies only wh
 
 ```json5
 {
-  "aerospace-account": {
+  "aerospace.biz": {
     "rules": [ /* ... */ ],
     "catch_all": {
       "move": "archive"

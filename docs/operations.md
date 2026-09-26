@@ -21,7 +21,7 @@ On the Raspberry Pi deployment, this is:
 Before connecting to any account, the filter checks the rules of every enabled account (accounts with `"mail_enabled": false` are not checked) for unknown match fields, empty matches, and match fields with no values. If it finds any, it logs one `ERROR` line per problem and a summary line, processes no mail, and exits with status 1:
 
 ```text
-[2026-09-23 16:09:44] [gmail-main] ERROR: rule #1 'delete 1800gotjunk to Archive' uses unknown match field 'from_contains'
+[2026-09-23 16:09:44] [gmail-personal] ERROR: rule #1 'Store promotions to Archive' uses unknown match field 'from_contains'
 [2026-09-23 16:09:44] ERROR: 1 rule problem(s) in rules.local.json5; no mail processed (see docs/rule-reference.md)
 ```
 
@@ -32,7 +32,7 @@ All problems in all accounts are reported in one run, so they can be fixed toget
 To test an account's rules without changing its mail, set `dry_run` on the account in `accounts.local.json5`:
 
 ```json5
-"gmail-main": {
+"gmail-personal": {
   "imap_host": "imap.gmail.com",
   "username": "your-address@gmail.com",
   "password": "...",
@@ -67,7 +67,7 @@ It uses the account information from `accounts.local.json5`, loaded from the dir
 Usage:
 
 ```bash
-python list_folders.py gmail-main
+python list_folders.py gmail-personal
 ```
 
 The account ID must be a key in `accounts.local.json5`.
@@ -154,21 +154,21 @@ Extras follow the outcome:
 Examples:
 
 ```text
-[2026-09-23 12:21:50] [gmail-main] MATCHED #16186 RULE='lifecare to Trash' SUBJECT='Your Member Discounts Are Here' → Trash (mail-filter-tests/alt-trash)
-[2026-09-23 12:21:50] [gmail-main] MATCHED #16201 RULE='GitHub mail' SUBJECT='New issue' → GitHub (mark_read)
-[2026-09-23 12:21:50] [gmail-main] MATCHED #16190 RULE='boulder theraputics no matching folder, error' SUBJECT='Spring newsletter' FAILED: copy to 'mail-filter-tests/MISSING-FOLDER' refused (status=NO); left in INBOX
-[2026-09-23 12:21:50] [gmail-main] NO_RULE #16159 SUBJECT='🔉 David, big savings for 3 years! See Inside.'
+[2026-09-23 12:21:50] [gmail-personal] MATCHED #16186 RULE='Store promotions' SUBJECT='Weekend sale: 20% off everything' → Trash ([Gmail]/Trash)
+[2026-09-23 12:21:50] [gmail-personal] MATCHED #16201 RULE='GitHub mail' SUBJECT='New issue' → GitHub (mark_read)
+[2026-09-23 12:21:50] [gmail-personal] NO_RULE #16159 SUBJECT='Lunch on Friday?'
+[2026-09-23 12:21:50] [aerospace.biz] MATCHED #5120 RULE='Newsletters' SUBJECT='Spring newsletter' FAILED: copy to 'INBOX.Newsletters' refused (status=NO); left in INBOX
 ```
 
 Lines that are not about a single matched message keep an account-level form, for example:
 
 ```text
-[2026-09-23 12:21:50] [mentalhijack-account] mail_enabled is false; skipping account
-[2026-09-23 12:21:50] [gmail-main] dry_run is true; no changes will be made on the server
-[2026-09-23 12:21:50] [gmail-main] ERROR: capability query failed; move and trash actions will be skipped
-[2026-09-23 12:21:50] [gmail-main] Trash mailbox: '[Gmail]/Trash' (server \Trash)
-[2026-09-23 12:21:50] [gmail-main] ERROR: fetch #16159 failed (status=NO)
-[2026-09-23 12:21:50] [gmail-main] ERROR: rule #1 'GitHub mail' uses unknown match field 'from_contains'
+[2026-09-23 12:21:50] [newsletters] mail_enabled is false; skipping account
+[2026-09-23 12:21:50] [gmail-personal] dry_run is true; no changes will be made on the server
+[2026-09-23 12:21:50] [gmail-personal] ERROR: capability query failed; move and trash actions will be skipped
+[2026-09-23 12:21:50] [gmail-personal] Trash mailbox: '[Gmail]/Trash' (server \Trash)
+[2026-09-23 12:21:50] [gmail-personal] ERROR: fetch #16159 failed (status=NO)
+[2026-09-23 12:21:50] [gmail-personal] ERROR: rule #1 'GitHub mail' uses unknown match field 'from_contains'
 ```
 
 The startup rule check ends with one line that has no account, because it covers the whole configuration:
@@ -237,7 +237,7 @@ With `password_env`, keep the variables in a secrets file readable only by the u
 
 ```bash
 # /home/pi/.config/mail-filter/secrets.env
-export MAILFILTER_PW_GMAIL_MAIN='app-password-here'
+export MAILFILTER_PW_GMAIL_PERSONAL='app-password-here'
 export MAILFILTER_PW_AEROSPACE='app-password-here'
 ```
 
