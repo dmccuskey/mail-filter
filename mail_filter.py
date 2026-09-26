@@ -4,16 +4,16 @@ import email
 import os
 import re
 import sys
-# import json
 from email.utils import getaddresses
 from email.header import decode_header
 from datetime import datetime
 from pathlib import Path
 
-try:
-    import json5 as json_parser
-except ImportError:
-    import json as json_parser
+# The bundled json5 (vendor/json5, see vendor/README.md) is always used,
+# even when a json5 package is installed, so every machine parses config
+# the same way.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "vendor"))
+import json5  # noqa: E402
 
 DRY_RUN = False  # set to False after you're happy with behavior
 DEV_LOGS = False
@@ -33,7 +33,7 @@ def log(msg: str) -> None:
 
 def load_json(path):
     with open(path, "r") as f:
-        return json_parser.load(f)
+        return json5.load(f)
 
 
 def get_to_addresses(msg):

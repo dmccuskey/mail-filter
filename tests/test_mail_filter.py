@@ -1,5 +1,6 @@
 import io
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -1130,6 +1131,33 @@ class ValidateRulesTests(unittest.TestCase):
         self.assertIn("ERROR: 1 rule problem(s) in rules.local.json5; no mail processed",
                       out.getvalue())
         self.assertNotIn("Traceback", out.getvalue())
+
+
+class LoadJsonTests(unittest.TestCase):
+    """Config is parsed by the bundled json5 in vendor/, never plain json."""
+
+    BASE = Path(__file__).resolve().parent.parent
+
+    def test_uses_bundled_json5(self):
+        self.assertEqual(Path(mail_filter.json5.__file__).resolve().parent,
+                         self.BASE / "vendor" / "json5")
+
+    def test_comments_and_trailing_commas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "accounts.local.json5"
+            path.write_text(
+                "{\n"
+                "  // a comment\n"
+                '  "test": { "imap_host": "imap.example.com", mail_enabled: false, },\n'
+                "}\n"
+            )
+            self.assertEqual(mail_filter.load_json(path),
+                             {"test": {"imap_host": "imap.example.com", "mail_enabled": False}})
+
+    def test_example_files_load(self):
+        for name in ("accounts", "folders", "rules"):
+            with self.subTest(name=name):
+                self.assertIsInstance(mail_filter.load_json(self.BASE / f"{name}.example.json5"), dict)
 
 
 class ConfigFormatTests(unittest.TestCase):

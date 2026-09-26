@@ -2,12 +2,7 @@ import sys
 import imaplib
 from pathlib import Path
 
-from mail_filter import account_password, parse_list_entry, password_problems
-
-try:
-    import json5 as json_parser
-except ImportError:
-    import json as json_parser
+from mail_filter import account_password, load_json, parse_list_entry, password_problems
 
 
 CONFIG_FILE = Path(__file__).resolve().parent / "accounts.local.json5"
@@ -20,8 +15,7 @@ target_id = sys.argv[1]
 
 # Load and parse the config file
 try:
-    with open(CONFIG_FILE, "r") as f:
-        config = json_parser.load(f)
+    config = load_json(CONFIG_FILE)
 except FileNotFoundError:
     print(f"Error: Configuration file '{CONFIG_FILE}' not found.")
     sys.exit(1)

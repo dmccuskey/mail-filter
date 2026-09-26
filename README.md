@@ -35,6 +35,9 @@ mail-filter/
 ├── folders.local.json5       # you create (gitignored)
 ├── rules.example.json5
 ├── rules.local.json5         # you create (gitignored)
+├── vendor/
+│   ├── README.md             # bundled packages: versions, licenses
+│   └── json5/                # JSON5 parser (Apache-2.0)
 ├── docs/
 │   ├── architecture.md
 │   ├── configuration.md
@@ -106,3 +109,9 @@ The project intentionally keeps those changes separate so the current live filte
 This software operates on real email.
 
 Use `DRY_RUN = True` when developing or modifying rules, and create a Git checkpoint before making behavior-changing IMAP changes.
+
+## License
+
+Mail Filter is released under the [MIT License](LICENSE).
+
+It includes [json5](https://github.com/dpranke/pyjson5) (Apache-2.0) in `vendor/json5/`; see [vendor/README.md](vendor/README.md).
