@@ -15,7 +15,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "vendor"))
 import json5  # noqa: E402
 
-DRY_RUN = False  # set to False after you're happy with behavior
 DEV_LOGS = False
 
 # Messages created by the live IMAP tests (imap_tests.py) carry this header,
@@ -292,7 +291,7 @@ def validate_config_format(accounts_all, folders_all):
                 problems.extend(
                     f"account '{account_id}' has an invalid \"{setting}\"; "
                     "it must be true or false"
-                    for setting in ("mail_enabled", "test_enabled")
+                    for setting in ("mail_enabled", "test_enabled", "dry_run")
                     if not isinstance(cfg.get(setting, True), bool)
                 )
 
@@ -312,6 +311,11 @@ def mail_enabled(cfg):
 def test_enabled(cfg):
     """True unless the account sets "test_enabled": false (the default is true)."""
     return cfg.get("test_enabled", True)
+
+
+def is_dry_run(cfg):
+    """True if the account sets "dry_run": true (the default is false)."""
+    return cfg.get("dry_run", False)
 
 
 def password_problems(account_id, cfg, environ=None):
@@ -497,7 +501,7 @@ def resolve_trash_mailbox(imap, account_id, folder_map):
     return mailbox, problem
 
 
-def log_message(account_id, result, msg_ref, subject, rule_name=None, outcome=None):
+def log_message(account_id, result, msg_ref, subject, dry_run, rule_name=None, outcome=None):
     """
     Write the single per-message line (format: docs/operations.md):
       [account] MATCHED #uid RULE='name' SUBJECT='subject' <outcome> [DRY_RUN]
@@ -510,7 +514,7 @@ def log_message(account_id, result, msg_ref, subject, rule_name=None, outcome=No
     line += f" SUBJECT='{subject}'"
     if outcome:
         line += f" {outcome}"
-    if DRY_RUN:
+    if dry_run:
         line += " [DRY_RUN]"
     log(line)
 
@@ -527,12 +531,12 @@ def apply_mark_read(imap, uid):
     return " (mark_read)", " (marked read)"
 
 
-def move_message(imap, uid, mailbox, destination, is_gmail, mark_read):
+def move_message(imap, uid, mailbox, destination, is_gmail, mark_read, dry_run):
     """
     Move (or trash) one message out of INBOX, identified by UID.
     Returns (outcome, expunge_needed).
     """
-    if DRY_RUN:
+    if dry_run:
         return f"→ {destination}" + (" (mark_read)" if mark_read else ""), False
 
     extras, read_note = apply_mark_read(imap, uid) if mark_read else ("", "")
@@ -568,9 +572,9 @@ def move_message(imap, uid, mailbox, destination, is_gmail, mark_read):
     return f"→ {destination}{extras}", True
 
 
-def delete_message(imap, uid, mark_read):
+def delete_message(imap, uid, mark_read, dry_run):
     """Mark one message \\Deleted for the end-of-run EXPUNGE. Returns (outcome, expunge_needed)."""
-    if DRY_RUN:
+    if dry_run:
         return "DELETED" + (" (mark_read)" if mark_read else ""), False
 
     extras, read_note = apply_mark_read(imap, uid) if mark_read else ("", "")
@@ -581,9 +585,9 @@ def delete_message(imap, uid, mark_read):
     return f"DELETED{extras}", True
 
 
-def mark_message_read(imap, uid):
+def mark_message_read(imap, uid, dry_run):
     """mark_read on its own: set \\Seen and leave the message in INBOX. Returns the outcome."""
-    if DRY_RUN:
+    if dry_run:
         return "MARKED_READ"
     status, _ = imap.uid("STORE", uid, "+FLAGS", "(\\Seen)")
     if status != "OK":
@@ -604,8 +608,11 @@ def process_account(account_cfg, folders_for_account, rules_cfg, test_run_id=Non
     host = account_cfg["imap_host"]
     user = account_cfg["username"]
     password = account_password(account_cfg)
+    dry_run = is_dry_run(account_cfg)
 
     log(f"[{account_id}] Connecting to {host} as {user}")
+    if dry_run:
+        log(f"[{account_id}] dry_run is true; no changes will be made on the server")
     imap = imaplib.IMAP4_SSL(host)
     imap.login(user, password)
 
@@ -678,7 +685,7 @@ def process_account(account_cfg, folders_for_account, rules_cfg, test_run_id=Non
         # Test messages belong only to the test run that created them
         if msg.get(TEST_HEADER) != test_run_id:
             subject = decode_mime_header(msg.get("Subject", "") or "")
-            log_message(account_id, "IGNORED", msg_ref, subject)
+            log_message(account_id, "IGNORED", msg_ref, subject, dry_run)
             continue
 
         # Recipients (To header only)
@@ -710,7 +717,7 @@ def process_account(account_cfg, folders_for_account, rules_cfg, test_run_id=Non
         # Decide rule
         rule = choose_rule(to_addresses, subject, from_addr, from_name, rules_cfg)
         if not rule:
-            log_message(account_id, "NO_RULE", msg_ref, subject)
+            log_message(account_id, "NO_RULE", msg_ref, subject, dry_run)
             continue
 
         rule_name = rule.get("name", "<unnamed>")
@@ -742,22 +749,22 @@ def process_account(account_cfg, folders_for_account, rules_cfg, test_run_id=Non
             else:
                 destination = f"Trash ({target_mailbox})" if trash_flag else target_mailbox
                 outcome, expunge = move_message(
-                    imap, uid, target_mailbox, destination, is_gmail, mark_read
+                    imap, uid, target_mailbox, destination, is_gmail, mark_read, dry_run
                 )
                 expunge_needed = expunge_needed or expunge
         elif delete_flag:
             # --- DELETE action ---
-            outcome, expunge = delete_message(imap, uid, mark_read)
+            outcome, expunge = delete_message(imap, uid, mark_read, dry_run)
             expunge_needed = expunge_needed or expunge
         elif mark_read:
             # --- MARK_READ on its own (message stays in INBOX) ---
-            outcome = mark_message_read(imap, uid)
+            outcome = mark_message_read(imap, uid, dry_run)
         else:
             outcome = "NO_ACTION"
 
-        log_message(account_id, "MATCHED", msg_ref, subject, rule_name, outcome)
+        log_message(account_id, "MATCHED", msg_ref, subject, dry_run, rule_name, outcome)
 
-    if not DRY_RUN and expunge_needed:
+    if not dry_run and expunge_needed:
         imap.expunge()
 
     imap.logout()

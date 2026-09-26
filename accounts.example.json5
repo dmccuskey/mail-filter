@@ -4,6 +4,8 @@
   // "password_env" (the name of an environment variable holding it).
   // Keep literal passwords only in accounts.local.json5.
   // Optional "mail_enabled": false skips an account (default true).
+  // Optional "dry_run": true logs what each rule would do without changing
+  // anything on the server (default false).
   
   "aerospace-account": {
     "imap_host": "premium147.web-hosting.com",

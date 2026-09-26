@@ -382,12 +382,12 @@ class LiveAccountMixin:
             cls.CFG["username"], cls.CFG["imap_host"], cls.ACCOUNT_ID,
             keep_prefixes=[server.folder(None)])
 
-        account = {"id": cls.ACCOUNT_ID, **cls.CFG}
+        # Each batch sets dry_run itself, whatever the account's own setting
+        account = {"id": cls.ACCOUNT_ID, **cls.CFG, "dry_run": False}
         folders = {"moved": cls.moved, "missing": cls.missing}
         cls.run_batch("a", account, folders)
         cls.run_batch("b", account, {"trash": cls.alt})
-        with mock.patch.object(mail_filter, "DRY_RUN", True):
-            cls.run_batch("c", account, {"moved": cls.moved})
+        cls.run_batch("c", {**account, "dry_run": True}, {"moved": cls.moved})
         cls.run_batch("d", account, {"moved": cls.moved}, normal_run=True)
         if RECORD:
             cls.write_recording()
@@ -488,7 +488,7 @@ class LiveAccountMixin:
         cls.recording.append({
             "batch": batch,
             "test_run_id": test_run_id,
-            "dry_run": mail_filter.DRY_RUN,
+            "dry_run": account["dry_run"],
             "folders": folders,
             "rules": rules,
             "log": [cls.scrubber.log_line(line) for line in out.getvalue().splitlines()],
@@ -634,6 +634,9 @@ class LiveAccountMixin:
     # ---------- batch c: dry run ----------
 
     def test_dry_run_changes_nothing(self):
+        self.assertIn(f"[{self.ACCOUNT_ID}] dry_run is true; no changes will be made on the server",
+                      self.logs["c"])
+        self.assertNotIn("dry_run", "\n".join(self.logs["a"] + self.logs["b"] + self.logs["d"]))
         for case in ("drymove", "drytrash", "drydelete"):
             with self.subTest(case=case):
                 self.assertTrue(self.line_for(case).endswith(" [DRY_RUN]"), self.line_for(case))

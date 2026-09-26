@@ -35,10 +35,9 @@ def replay(batch):
     fake = imap_recording.RecordedIMAP(batch["exchanges"])
     out = io.StringIO()
     with mock.patch.object(mail_filter.imaplib, "IMAP4_SSL", fake), \
-            mock.patch.object(mail_filter, "DRY_RUN", batch["dry_run"]), \
             redirect_stdout(out):
         mail_filter.process_account(
-            ACCOUNT, batch["folders"], batch["rules"], test_run_id=batch["test_run_id"])
+            {**ACCOUNT, "dry_run": batch["dry_run"]}, batch["folders"], batch["rules"], test_run_id=batch["test_run_id"])
     return [line.split("] ", 1)[-1] for line in out.getvalue().splitlines()]
 
 
