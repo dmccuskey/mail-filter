@@ -207,3 +207,4 @@ The durable records for the project's accepted architectural decisions are in [d
 - [ADR 005: Identify Messages by IMAP UID](decisions/005-uid-based-message-identification.md)
 - [ADR 006: Gmail Move Semantics and an Explicit Trash Action](decisions/006-gmail-move-and-trash-semantics.md)
 - [ADR 007: Account-Keyed Configuration Files](decisions/007-account-keyed-configuration.md)
+- [ADR 008: Live IMAP Tests](decisions/008-live-imap-tests.md)
